@@ -1,0 +1,670 @@
+-- ============================================
+-- Friend Request System — Roblox GUI
+-- Draggable | Closeable | Minimizable
+-- ============================================
+-- Place this LocalScript inside StarterPlayerScripts
+-- ============================================
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- ============================================
+-- DATA STORAGE
+-- ============================================
+
+local friendRequests = {} -- { [recipient] = { { from = sender }, ... } }
+local friendsList = {}    -- { [player] = { friend1, friend2, ... } }
+local registeredPlayers = {}
+
+-- ============================================
+-- THEME / STYLE CONFIG
+-- ============================================
+
+local THEME = {
+	BG            = Color3.fromRGB(30, 30, 35),
+	BG_LIGHT      = Color3.fromRGB(40, 40, 48),
+	BG_HOVER      = Color3.fromRGB(50, 50, 60),
+	ACCENT        = Color3.fromRGB(80, 160, 255),
+	ACCENT_HOVER  = Color3.fromRGB(100, 180, 255),
+	ACCEPT        = Color3.fromRGB(50, 180, 100),
+	ACCEPT_HOVER  = Color3.fromRGB(70, 210, 120),
+	DECLINE       = Color3.fromRGB(200, 70, 70),
+	DECLINE_HOVER = Color3.fromRGB(230, 90, 90),
+	CLOSE         = Color3.fromRGB(220, 80, 80),
+	CLOSE_HOVER   = Color3.fromRGB(255, 100, 100),
+	MINIMIZE      = Color3.fromRGB(220, 180, 50),
+	MINIMIZE_HOVER= Color3.fromRGB(255, 210, 70),
+	TEXT          = Color3.fromRGB(230, 230, 235),
+	TEXT_DIM      = Color3.fromRGB(150, 150, 160),
+	BORDER        = Color3.fromRGB(60, 60, 70),
+	SHADOW        = Color3.fromRGB(0, 0, 0),
+}
+
+local FONT = Enum.Font.GothamBold
+local FONT_BODY = Enum.Font.Gotham
+
+-- ============================================
+-- HELPER: Create a UICorner
+-- ============================================
+
+local function addCorner(parent, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or 8)
+	corner.Parent = parent
+	return corner
+end
+
+-- ============================================
+-- HELPER: Create a UIStroke (border)
+-- ============================================
+
+local function addStroke(parent, color, thickness)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color or THEME.BORDER
+	stroke.Thickness = thickness or 1
+	stroke.Parent = parent
+	return stroke
+end
+
+-- ============================================
+-- HELPER: Create a shadow-like UIGradient
+-- ============================================
+
+local function addShadow(parent)
+	local shadow = Instance.new("ImageLabel")
+	shadow.Name = "Shadow"
+	shadow.Size = UDim2.new(1, 20, 1, 20)
+	shadow.Position = UDim2.new(0, -10, 0, -10)
+	shadow.BackgroundTransparency = 1
+	shadow.Image = "rbxassetid://5454449162" -- soft shadow asset
+	shadow.ImageTransparency = 0.4
+	shadow.ZIndex = -1
+	shadow.Parent = parent
+	return shadow
+end
+
+-- ============================================
+-- HELPER: Smooth tween a property
+-- ============================================
+
+local function tweenProperty(instance, property, goal, duration)
+	local info = TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(instance, info, { [property] = goal }):Play()
+end
+
+-- ============================================
+-- HELPER: Generic button factory
+-- ============================================
+
+local function createButton(text, size, pos, bgColor, hoverColor, textColor, textSize, parent)
+	local btn = Instance.new("TextButton")
+	btn.Name = text .. "Button"
+	btn.Size = size
+	btn.Position = pos
+	btn.BackgroundColor3 = bgColor
+	btn.BorderSizePixel = 0
+	btn.Text = text
+	btn.TextColor3 = textColor or Color3.new(1, 1, 1)
+	btn.TextSize = textSize or 13
+	btn.Font = FONT
+	btn.ClipsDescendants = true
+	btn.Parent = parent
+	addCorner(btn, 6)
+
+	-- Hover effect
+	btn.MouseEntered:Connect(function()
+		tweenProperty(btn, "BackgroundColor3", hoverColor, 0.15)
+	end)
+	btn.MouseLeaved:Connect(function()
+		tweenProperty(btn, "BackgroundColor3", bgColor, 0.15)
+	end)
+
+	return btn
+end
+
+-- ============================================
+-- BUILD THE MAIN GUI
+-- ============================================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FriendRequestGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player.PlayerGui
+
+-- ── Main Window Frame ──
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 380, 0, 480)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -240)
+mainFrame.BackgroundColor3 = THEME.BG
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+addCorner(mainFrame, 12)
+addStroke(mainFrame, THEME.BORDER, 1)
+addShadow(mainFrame)
+
+-- ── Title Bar ──
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 42)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = THEME.BG_LIGHT
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+-- Top corners only via clipping on mainFrame
+
+local titleText = Instance.new("TextLabel")
+titleText.Name = "TitleText"
+titleText.Size = UDim2.new(1, -90, 1, 0)
+titleText.Position = UDim2.new(0, 14, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "👥  Friend Requests"
+titleText.TextColor3 = THEME.TEXT
+titleText.TextSize = 15
+titleText.Font = FONT
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- ── Minimize Button ──
+local minimizeBtn = createButton(
+	"─", UDim2.new(0, 26, 0, 26), UDim2.new(1, -78, 0.5, -13),
+	THEME.MINIMIZE, THEME.MINIMIZE_HOVER, Color3.new(1, 1, 1), 18, titleBar
+)
+minimizeBtn.TextSize = 20
+minimizeBtn.TextYAlignment = Enum.TextYAlignment.Center
+
+-- ── Close Button ──
+local closeBtn = createButton(
+	"✕", UDim2.new(0, 26, 0, 26), UDim2.new(1, -48, 0.5, -13),
+	THEME.CLOSE, THEME.CLOSE_HOVER, Color3.new(1, 1, 1), 15, titleBar
+)
+
+-- ── Divider under title bar ──
+local divider = Instance.new("Frame")
+divider.Name = "Divider"
+divider.Size = UDim2.new(1, 0, 0, 1)
+divider.Position = UDim2.new(0, 0, 0, 42)
+divider.BackgroundColor3 = THEME.BORDER
+divider.BorderSizePixel = 0
+divider.Parent = mainFrame
+
+-- ── Tab Bar (Requests / Friends) ──
+local tabBar = Instance.new("Frame")
+tabBar.Name = "TabBar"
+tabBar.Size = UDim2.new(1, 0, 0, 36)
+tabBar.Position = UDim2.new(0, 0, 0, 43)
+tabBar.BackgroundColor3 = THEME.BG
+tabBar.BorderSizePixel = 0
+tabBar.Parent = mainFrame
+
+local function createTab(text, xPos, isActive)
+	local tab = Instance.new("TextButton")
+	tab.Name = text .. "Tab"
+	tab.Size = UDim2.new(0.5, 0, 1, 0)
+	tab.Position = UDim2.new(xPos, 0, 0, 0)
+	tab.BackgroundColor3 = isActive and THEME.BG_LIGHT or THEME.BG
+	tab.BorderSizePixel = 0
+	tab.Text = text
+	tab.TextColor3 = isActive and THEME.ACCENT or THEME.TEXT_DIM
+	tab.TextSize = 13
+	tab.Font = FONT_BODY
+	tab.Parent = tabBar
+
+	-- Active indicator line
+	local indicator = Instance.new("Frame")
+	indicator.Name = "Indicator"
+	indicator.Size = UDim2.new(1, 0, 0, 3)
+	indicator.Position = UDim2.new(0, 0, 1, -3)
+	indicator.BackgroundColor3 = THEME.ACCENT
+	indicator.BorderSizePixel = 0
+	indicator.Transparency = isActive and 0 or 1
+	indicator.Parent = tab
+
+	return tab, indicator
+end
+
+local requestsTab, requestsIndicator = createTab("Requests", 0, true)
+local friendsTab, friendsIndicator = createTab("Friends", 0.5, false)
+
+-- ── Scrollable Content Area ──
+local contentFrame = Instance.new("ScrollingFrame")
+contentFrame.Name = "ContentFrame"
+contentFrame.Size = UDim2.new(1, -16, 1, -87)
+contentFrame.Position = UDim2.new(0, 8, 0, 79)
+contentFrame.BackgroundTransparency = 1
+contentFrame.BorderSizePixel = 0
+contentFrame.ScrollBarThickness = 4
+contentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+contentFrame.Parent = mainFrame
+
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.Padding = UDim.new(0, 6)
+contentLayout.Parent = contentFrame
+
+local contentPadding = Instance.new("UIPadding")
+contentPadding.PaddingTop = UDim.new(0, 6)
+contentPadding.PaddingBottom = UDim.new(0, 6)
+contentPadding.Parent = contentFrame
+
+-- ── "Send Request" input area ──
+local inputFrame = Instance.new("Frame")
+inputFrame.Name = "InputFrame"
+inputFrame.Size = UDim2.new(1, -16, 0, 44)
+inputFrame.Position = UDim2.new(0, 8, 1, -52)
+inputFrame.BackgroundColor3 = THEME.BG_LIGHT
+inputFrame.BorderSizePixel = 0
+inputFrame.Parent = mainFrame
+addCorner(inputFrame, 8)
+addStroke(inputFrame, THEME.BORDER, 1)
+
+local inputField = Instance.new("TextBox")
+inputField.Name = "InputField"
+inputField.Size = UDim2.new(1, -100, 1, -12)
+inputField.Position = UDim2.new(0, 6, 0, 6)
+inputField.BackgroundColor3 = THEME.BG
+inputField.BorderSizePixel = 0
+inputField.Text = ""
+inputField.PlaceholderText = "Enter username..."
+inputField.TextColor3 = THEME.TEXT
+inputField.TextSize = 13
+inputField.Font = FONT_BODY
+inputField.TextXAlignment = Enum.TextXAlignment.Left
+inputField.ClearTextOnFocus = false
+inputField.Parent = inputFrame
+addCorner(inputField, 6)
+addStroke(inputField, THEME.BORDER, 1)
+
+-- UIPadding for text inside input
+local inputPad = Instance.new("UIPadding")
+inputPad.PaddingLeft = UDim.new(0, 8)
+inputPad.Parent = inputField
+
+local sendBtn = createButton(
+	"Send", UDim2.new(0, 86, 1, -12), UDim2.new(1, -92, 0, 6),
+	THEME.ACCENT, THEME.ACCENT_HOVER, Color3.new(1, 1, 1), 13, inputFrame
+)
+
+-- ============================================
+-- DRAGGING LOGIC
+-- ============================================
+
+local isDragging = false
+local dragOffset = Vector2.new(0, 0)
+
+titleBar.InputBegan:Connect(function(input, gameProcessed)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isDragging = true
+		local absPos = mainFrame.AbsolutePosition
+		dragOffset = input.Position - Vector2.new(absPos.X, absPos.Y)
+	end
+end)
+
+titleBar.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isDragging = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local newX = input.Position.X - dragOffset.X
+		local newY = input.Position.Y - dragOffset.Y
+		-- Clamp to screen
+		local vp = workspace.CurrentCamera.ViewportSize
+		newX = math.max(0, math.min(newX, vp.X - mainFrame.AbsoluteSize.X))
+		newY = math.max(0, math.min(newY, vp.Y - mainFrame.AbsoluteSize.Y))
+		mainFrame.Position = UDim2.new(0, newX, 0, newY)
+	end
+end)
+
+-- Also release drag if mouse is released anywhere
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isDragging = false
+	end
+end)
+
+-- ============================================
+-- MINIMIZE / CLOSE LOGIC
+-- ============================================
+
+local isMinimized = false
+local normalSize = mainFrame.Size
+local normalPosition = mainFrame.Position
+local minimizedSize = UDim2.new(0, 220, 0, 42)
+
+local function setMinimized(minimize)
+	isMinimized = minimize
+	if minimize then
+		normalPosition = mainFrame.Position
+		local info = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		TweenService:Create(mainFrame, info, {
+			Size = minimizedSize
+		}):Play()
+		contentFrame.Visible = false
+		inputFrame.Visible = false
+		tabBar.Visible = false
+		divider.Visible = false
+		titleText.Text = "👥 Requests"
+		minimizeBtn.Text = "▬"
+	else
+		local info = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		TweenService:Create(mainFrame, info, {
+			Size = normalSize
+		}):Play()
+		task.delay(0.05, function()
+			contentFrame.Visible = true
+			inputFrame.Visible = true
+			tabBar.Visible = true
+			divider.Visible = true
+			titleText.Text = "👥  Friend Requests"
+			minimizeBtn.Text = "─"
+		end)
+	end
+end
+
+minimizeBtn.Activated:Connect(function()
+	setMinimized(not isMinimized)
+end)
+
+closeBtn.Activated:Connect(function()
+	local info = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(mainFrame, info, {
+		Size = UDim2.new(0, 0, 0, 0),
+		Position = UDim2.new(
+			mainFrame.Position.X.Scale,
+			mainFrame.Position.X.Offset + mainFrame.AbsoluteSize.X / 2,
+			mainFrame.Position.Y.Scale,
+			mainFrame.Position.Y.Offset + mainFrame.AbsoluteSize.Y / 2
+		)
+	}):Play()
+	task.delay(0.22, function()
+		screenGui:Destroy()
+	end)
+end)
+
+-- ============================================
+-- TAB SWITCHING
+-- ============================================
+
+local activeTab = "Requests"
+
+local function switchTab(tabName)
+	activeTab = tabName
+	local isReq = (tabName == "Requests")
+
+	requestsTab.BackgroundColor3 = isReq and THEME.BG_LIGHT or THEME.BG
+	requestsTab.TextColor3 = isReq and THEME.ACCENT or THEME.TEXT_DIM
+	requestsIndicator.Transparency = isReq and 0 or 1
+
+	friendsTab.BackgroundColor3 = (not isReq) and THEME.BG_LIGHT or THEME.BG
+	friendsTab.TextColor3 = (not isReq) and THEME.ACCENT or THEME.TEXT_DIM
+	friendsIndicator.Transparency = (not isReq) and 0 or 1
+
+	refreshContent()
+end
+
+requestsTab.Activated:Connect(function() switchTab("Requests") end)
+friendsTab.Activated:Connect(function() switchTab("Friends") end)
+
+-- ============================================
+-- CONTENT RENDERING
+-- ============================================
+
+local function clearContent()
+	for _, child in ipairs(contentFrame:GetChildren()) do
+		if child:IsA("GuiBase") then
+			child:Destroy()
+		end
+	end
+end
+
+-- Creates a single request card with Accept / Decline buttons
+local function createRequestCard(senderName)
+	local card = Instance.new("Frame")
+	card.Name = "RequestCard"
+	card.Size = UDim2.new(1, 0, 0, 52)
+	card.BackgroundColor3 = THEME.BG_LIGHT
+	card.BorderSizePixel = 0
+	card.Parent = contentFrame
+	addCorner(card, 8)
+	addStroke(card, THEME.BORDER, 1)
+
+	-- Avatar placeholder (circle)
+	local avatar = Instance.new("Frame")
+	avatar.Name = "Avatar"
+	avatar.Size = UDim2.new(0, 34, 0, 34)
+	avatar.Position = UDim2.new(0, 10, 0.5, -17)
+	avatar.BackgroundColor3 = THEME.ACCENT
+	avatar.BorderSizePixel = 0
+	avatar.Parent = card
+	addCorner(avatar, 17)
+
+	local avatarText = Instance.new("TextLabel")
+	avatarText.Size = UDim2.new(1, 0, 1, 0)
+	avatarText.BackgroundTransparency = 1
+	avatarText.Text = string.upper(string.sub(senderName, 1, 1))
+	avatarText.TextColor3 = Color3.new(1, 1, 1)
+	avatarText.TextSize = 16
+	avatarText.Font = FONT
+	avatarText.Parent = avatar
+
+	-- Name label
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(0, 120, 0, 20)
+	nameLabel.Position = UDim2.new(0, 52, 0.5, -10)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = senderName
+	nameLabel.TextColor3 = THEME.TEXT
+	nameLabel.TextSize = 14
+	nameLabel.Font = FONT
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = card
+
+	-- Accept button
+	local acceptBtn = createButton(
+		"✓", UDim2.new(0, 52, 0, 28), UDim2.new(1, -120, 0.5, -14),
+		THEME.ACCEPT, THEME.ACCEPT_HOVER, Color3.new(1, 1, 1), 16, card
+	)
+
+	-- Decline button
+	local declineBtn = createButton(
+		"✕", UDim2.new(0, 52, 0, 28), UDim2.new(1, -62, 0.5, -14),
+		THEME.DECLINE, THEME.DECLINE_HOVER, Color3.new(1, 1, 1), 14, card
+	)
+
+	-- Accept logic
+	acceptBtn.Activated:Connect(function()
+		local myName = player.Name
+		-- Add to friends bidirectionally
+		friendsList[myName] = friendsList[myName] or {}
+		friendsList[senderName] = friendsList[senderName] or {}
+		table.insert(friendsList[myName], senderName)
+		table.insert(friendsList[senderName], myName)
+		-- Remove request
+		if friendRequests[myName] then
+			for i, req in ipairs(friendRequests[myName]) do
+				if req.from == senderName then
+					table.remove(friendRequests[myName], i)
+					break
+				end
+			end
+		end
+		refreshContent()
+	end)
+
+	-- Decline logic
+	declineBtn.Activated:Connect(function()
+		local myName = player.Name
+		if friendRequests[myName] then
+			for i, req in ipairs(friendRequests[myName]) do
+				if req.from == senderName then
+					table.remove(friendRequests[myName], i)
+					break
+				end
+			end
+		end
+		refreshContent()
+	end)
+
+	return card
+end
+
+-- Creates a single friend card
+local function createFriendCard(friendName)
+	local card = Instance.new("Frame")
+	card.Name = "FriendCard"
+	card.Size = UDim2.new(1, 0, 0, 48)
+	card.BackgroundColor3 = THEME.BG_LIGHT
+	card.BorderSizePixel = 0
+	card.Parent = contentFrame
+	addCorner(card, 8)
+	addStroke(card, THEME.BORDER, 1)
+
+	-- Avatar
+	local avatar = Instance.new("Frame")
+	avatar.Name = "Avatar"
+	avatar.Size = UDim2.new(0, 32, 0, 32)
+	avatar.Position = UDim2.new(0, 10, 0.5, -16)
+	avatar.BackgroundColor3 = THEME.ACCEPT
+	avatar.BorderSizePixel = 0
+	avatar.Parent = card
+	addCorner(avatar, 16)
+
+	local avatarText = Instance.new("TextLabel")
+	avatarText.Size = UDim2.new(1, 0, 1, 0)
+	avatarText.BackgroundTransparency = 1
+	avatarText.Text = string.upper(string.sub(friendName, 1, 1))
+	avatarText.TextColor3 = Color3.new(1, 1, 1)
+	avatarText.TextSize = 15
+	avatarText.Font = FONT
+	avatarText.Parent = avatar
+
+	-- Online dot
+	local onlineDot = Instance.new("Frame")
+	onlineDot.Size = UDim2.new(0, 10, 0, 10)
+	onlineDot.Position = UDim2.new(0, 32, 0, 32)
+	onlineDot.BackgroundColor3 = THEME.ACCEPT
+	onlineDot.BorderSizePixel = 0
+	onlineDot.Parent = avatar
+	addCorner(onlineDot, 5)
+
+	-- Name
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -60, 0, 20)
+	nameLabel.Position = UDim2.new(0, 52, 0.5, -10)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = friendName
+	nameLabel.TextColor3 = THEME.TEXT
+	nameLabel.TextSize = 14
+	nameLabel.Font = FONT
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = card
+
+	return card
+end
+
+-- Empty state label
+local function createEmptyLabel(text)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 40)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = THEME.TEXT_DIM
+	label.TextSize = 13
+	label.Font = FONT_BODY
+	label.Parent = contentFrame
+	return label
+end
+
+-- Main refresh function
+function refreshContent()
+	clearContent()
+	local myName = player.Name
+
+	if activeTab == "Requests" then
+		local requests = friendRequests[myName] or {}
+		if #requests == 0 then
+			createEmptyLabel("No pending friend requests.")
+		else
+			for _, req in ipairs(requests) do
+				createRequestCard(req.from)
+			end
+		end
+	else
+		local friends = friendsList[myName] or {}
+		if #friends == 0 then
+			createEmptyLabel("You have no friends yet.")
+		else
+			for _, name in ipairs(friends) do
+				createFriendCard(name)
+			end
+		end
+	end
+
+	-- Update scrolling canvas size
+	contentFrame.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 12)
+end
+
+-- ============================================
+-- SEND REQUEST LOGIC
+-- ============================================
+
+sendBtn.Activated:Connect(function()
+	local targetName = inputField.Text:match("^%s*(.-)%s*$") -- trim
+	if targetName == "" then return end
+	if targetName == player.Name then
+		print("[!] You cannot send a friend request to yourself.")
+		inputField.Text = ""
+		return
+	end
+
+	-- Check already friends
+	local myFriends = friendsList[player.Name] or {}
+	for _, f in ipairs(myFriends) do
+		if f == targetName then
+			print("[!] Already friends with " .. targetName)
+			inputField.Text = ""
+			return
+		end
+	end
+
+	-- Inject a fake incoming request to the target for demo purposes
+	-- In a real multiplayer setup this would go through a RemoteEvent
+	friendRequests[targetName] = friendRequests[targetName] or {}
+	table.insert(friendRequests[targetName], { from = player.Name })
+
+	-- For demo: also simulate the target sending one back to you
+	friendRequests[player.Name] = friendRequests[player.Name] or {}
+	table.insert(friendRequests[player.Name], { from = targetName })
+
+	print("[>] Friend request sent to '" .. targetName .. "'.")
+	inputField.Text = ""
+	refreshContent()
+end)
+
+-- ============================================
+-- DEMO: Populate with fake requests on start
+-- ============================================
+
+task.delay(0.5, function()
+	local myName = player.Name
+	friendRequests[myName] = {
+		{ from = "Alice" },
+		{ from = "Bob" },
+		{ from = "Charlie" },
+	}
+	friendsList[myName] = { "Diana" }
+
+	refreshContent()
+end)
+
+print("[✓] Friend Request GUI loaded. Drag the title bar, minimize, or close!")
+g
