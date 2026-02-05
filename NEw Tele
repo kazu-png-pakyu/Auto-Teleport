@@ -183,7 +183,7 @@ returnCorner.Parent = returnButton
 
 print("GUI created successfully")
 
--- LOCATION DETECTION FUNCTION
+-- ENHANCED LOCATION DETECTION FUNCTION
 local function detectCurrentLocation()
     -- METHOD 1: Check for specific workspace objects
     -- CUSTOMIZE THESE based on your game's actual structure!
@@ -242,6 +242,16 @@ local function detectCurrentLocation()
     return "Garden"
 end
 
+-- Function to continuously update location
+local function updateLocation()
+    local newLocation = detectCurrentLocation()
+    if newLocation ~= currentLocation then
+        print("🔄 Location changed:", currentLocation, "→", newLocation)
+        currentLocation = newLocation
+        updateGui()
+    end
+end
+
 -- INVENTORY FUNCTIONS
 local function getInventoryCount()
     local itemCount = 0
@@ -280,12 +290,31 @@ local function updateGui()
     -- Update inventory status
     if isInventoryFull() then
         statusLabel.TextColor3 = Color3.fromRGB(255, 85, 85)
-        teleportButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
-        teleportButton.Text = "INVENTORY FULL - GO TO PLAZA!"
+        if currentLocation ~= "Plaza" then
+            teleportButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+            teleportButton.Text = "INVENTORY FULL - GO TO PLAZA!"
+        else
+            teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+            teleportButton.Text = "Already in Plaza"
+        end
     else
         statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-        teleportButton.Text = "Teleport to Plaza"
+        if currentLocation ~= "Plaza" then
+            teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+            teleportButton.Text = "Teleport to Plaza"
+        else
+            teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+            teleportButton.Text = "Already in Plaza"
+        end
+    end
+    
+    -- Update return button based on location
+    if currentLocation == "Garden" then
+        returnButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        returnButton.Text = "Already in Garden"
+    else
+        returnButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        returnButton.Text = "Return to Garden"
     end
     
     -- Update auto-status
@@ -316,8 +345,13 @@ end
 
 -- TELEPORT FUNCTIONS
 local function teleportToPlaza()
+    -- ✅ ENHANCED: Check if already in Plaza before attempting teleport
     if currentLocation == "Plaza" then
         print("ℹ️ Already in Plaza - skipping teleport")
+        teleportButton.Text = "Already in Plaza"
+        teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        task.wait(1.5)
+        updateGui()
         return
     end
     
@@ -351,13 +385,13 @@ local function teleportToPlaza()
 end
 
 local function teleportToGarden()
+    -- ✅ ENHANCED: Check if already in Garden before attempting teleport
     if currentLocation == "Garden" then
         print("ℹ️ Already in Garden - skipping teleport")
         returnButton.Text = "Already in Garden"
         returnButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        task.wait(1)
-        returnButton.Text = "Return to Garden"
-        returnButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        task.wait(1.5)
+        updateGui()
         return
     end
     
@@ -422,9 +456,17 @@ player.CharacterAdded:Connect(function(newCharacter)
     character = newCharacter
     backpack = player:WaitForChild("Backpack")
     task.wait(2)
-    currentLocation = detectCurrentLocation()
+    updateLocation()
     print("🔄 Character respawned - Location:", currentLocation)
     updateGui()
+end)
+
+-- ✅ NEW: Continuous location monitoring
+task.spawn(function()
+    while true do
+        task.wait(3) -- Check location every 3 seconds
+        updateLocation()
+    end
 end)
 
 -- INITIAL SETUP
@@ -439,6 +481,9 @@ task.spawn(function()
     while AUTO_TELEPORT do
         task.wait(2) -- Check every 2 seconds
         
+        -- ✅ Update location before checking conditions
+        updateLocation()
+        
         local currentInventory = getInventoryCount()
         
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -449,22 +494,28 @@ task.spawn(function()
         print("   hasAutoTeleportedFromPlaza:", hasAutoTeleportedFromPlaza)
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        -- RULE 1: If in Garden and inventory is FULL → Go to Plaza (ONLY ONCE)
+        -- ✅ RULE 1: If in Garden and inventory is FULL → Go to Plaza (ONLY ONCE)
+        -- Will NOT trigger if currentLocation == "Plaza"
         if currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
             print("🚨 TRIGGER: Inventory FULL in Garden → Going to Plaza (ONE TIME)")
-            hasAutoTeleportedToPlaza = true -- Mark as done, won't auto-teleport to Plaza again
+            hasAutoTeleportedToPlaza = true
             teleportToPlaza()
         elseif currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and hasAutoTeleportedToPlaza then
             print("⏹️ Auto-teleport to Plaza already used. Manual teleport only.")
+        elseif currentLocation == "Plaza" and currentInventory >= MAX_INVENTORY_SIZE then
+            print("✅ Already in Plaza - no need to teleport")
         end
         
-        -- RULE 2: If in Plaza and inventory is ≤ RETURN_THRESHOLD → Return to Garden (ONLY ONCE)
+        -- ✅ RULE 2: If in Plaza and inventory is ≤ RETURN_THRESHOLD → Return to Garden (ONLY ONCE)
+        -- Will NOT trigger if currentLocation == "Garden"
         if currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
             print("🌱 TRIGGER: Inventory ≤" .. RETURN_THRESHOLD .. " in Plaza → Returning to Garden (ONE TIME)")
-            hasAutoTeleportedFromPlaza = true -- Mark as done, won't auto-teleport from Plaza again
+            hasAutoTeleportedFromPlaza = true
             teleportToGarden()
         elseif currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and hasAutoTeleportedFromPlaza then
             print("⏹️ Auto-teleport from Plaza already used. Manual teleport only.")
+        elseif currentLocation == "Garden" and currentInventory <= RETURN_THRESHOLD then
+            print("✅ Already in Garden - no need to teleport")
         end
         
         updateGui()
@@ -476,4 +527,5 @@ print("📍 Current Location:", currentLocation)
 print("⚙️ Auto-teleport: ENABLED")
 print("📦 Full inventory trigger:", MAX_INVENTORY_SIZE)
 print("🔙 Return trigger:", RETURN_THRESHOLD)
+print("🚫 Anti-duplicate teleport: ENABLED")
 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
