@@ -52,6 +52,11 @@ end
 local joinInProgress = false
 local currentLocation = "Unknown" -- Will be detected on startup
 
+-- ONE-TIME TELEPORT SYSTEM
+-- This prevents auto-teleport after the first time, even with auto-execute
+local hasAutoTeleportedToPlaza = false -- Will only auto-teleport to Plaza ONCE per session
+local hasAutoTeleportedFromPlaza = false -- Will only auto-teleport from Plaza ONCE per session
+
 -- Create GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "InventoryTeleportGui"
@@ -285,17 +290,23 @@ local function updateGui()
     
     -- Update auto-status
     if currentLocation == "Garden" then
-        if currentCount >= MAX_INVENTORY_SIZE then
-            autoStatusLabel.Text = "⚙️ Auto: Ready to go to Plaza"
+        if currentCount >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Ready to go to Plaza (1x)"
             autoStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+        elseif currentCount >= MAX_INVENTORY_SIZE and hasAutoTeleportedToPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Used (manual teleport only)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
         else
             autoStatusLabel.Text = "⚙️ Auto: Farming... (" .. currentCount .. "/" .. MAX_INVENTORY_SIZE .. ")"
             autoStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         end
     elseif currentLocation == "Plaza" then
-        if currentCount <= RETURN_THRESHOLD then
-            autoStatusLabel.Text = "⚙️ Auto: Ready to return to Garden"
+        if currentCount <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Ready to return to Garden (1x)"
             autoStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+        elseif currentCount <= RETURN_THRESHOLD and hasAutoTeleportedFromPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Used (manual teleport only)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
         else
             autoStatusLabel.Text = "⚙️ Auto: Trading... (" .. currentCount .. " > " .. RETURN_THRESHOLD .. ")"
             autoStatusLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
@@ -434,18 +445,26 @@ task.spawn(function()
         print("📊 AUTO-CHECK")
         print("   Location:", currentLocation)
         print("   Inventory:", currentInventory .. "/" .. MAX_INVENTORY_SIZE)
+        print("   hasAutoTeleportedToPlaza:", hasAutoTeleportedToPlaza)
+        print("   hasAutoTeleportedFromPlaza:", hasAutoTeleportedFromPlaza)
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        -- RULE 1: If in Garden and inventory is FULL → Go to Plaza
-        if currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE then
-            print("🚨 TRIGGER: Inventory FULL in Garden → Going to Plaza")
+        -- RULE 1: If in Garden and inventory is FULL → Go to Plaza (ONLY ONCE)
+        if currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
+            print("🚨 TRIGGER: Inventory FULL in Garden → Going to Plaza (ONE TIME)")
+            hasAutoTeleportedToPlaza = true -- Mark as done, won't auto-teleport to Plaza again
             teleportToPlaza()
+        elseif currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and hasAutoTeleportedToPlaza then
+            print("⏹️ Auto-teleport to Plaza already used. Manual teleport only.")
         end
         
-        -- RULE 2: If in Plaza and inventory is ≤ RETURN_THRESHOLD → Return to Garden
-        if currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD then
-            print("🌱 TRIGGER: Inventory ≤" .. RETURN_THRESHOLD .. " in Plaza → Returning to Garden")
+        -- RULE 2: If in Plaza and inventory is ≤ RETURN_THRESHOLD → Return to Garden (ONLY ONCE)
+        if currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
+            print("🌱 TRIGGER: Inventory ≤" .. RETURN_THRESHOLD .. " in Plaza → Returning to Garden (ONE TIME)")
+            hasAutoTeleportedFromPlaza = true -- Mark as done, won't auto-teleport from Plaza again
             teleportToGarden()
+        elseif currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and hasAutoTeleportedFromPlaza then
+            print("⏹️ Auto-teleport from Plaza already used. Manual teleport only.")
         end
         
         updateGui()
