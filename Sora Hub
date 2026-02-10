@@ -1,0 +1,498 @@
+Config = {
+         api = ''879ff778-6b08-4c49-91e4-21e9a99a5ae0''
+         service =''Sora Hub''
+         provider =''Sora Hub''
+}
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+
+--// 1. UNIVERSAL REMOTE SCANNER //--
+local Remote_OpenEgg = nil
+-- Specific path (Fast check)
+pcall(function() Remote_OpenEgg = ReplicatedStorage["ec535b0a-bc8c-4743-b9d5-b81b90371395"].Functions.OpenEgg end)
+
+-- Deep Scan (Fallback)
+if not Remote_OpenEgg then
+    for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+        if v.Name == "OpenEgg" and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
+            Remote_OpenEgg = v
+            break
+        end
+    end
+end
+
+--// 2. SETTINGS VARIABLES //--
+local Settings = {
+    AutoClick = false,
+    SelectedEgg = "None",
+    HatchMode = 1,
+    AutoHatch = false,
+    AntiAfk = true, 
+    AutoTp = true
+}
+
+--// 3. GUI THEME SETUP (CLEAN DARK) //--
+local ACCENT_COLOR = Color3.fromRGB(255, 255, 255) 
+local BUTTON_COLOR = Color3.fromRGB(0, 110, 255) 
+local BG_COLOR = Color3.fromRGB(40, 40, 40) 
+local SIDE_COLOR = Color3.fromRGB(30, 30, 30) 
+local ITEM_COLOR = Color3.fromRGB(50, 50, 50) 
+
+local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+if PlayerGui:FindFirstChild("SoraCleanUI") then PlayerGui.SoraCleanUI:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SoraCleanUI"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 9999
+
+--// 4. MAIN WINDOW //--
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 480, 0, 270)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -135)
+MainFrame.BackgroundColor3 = BG_COLOR
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false 
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainFrame
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 35)
+TitleBar.BackgroundTransparency = 1
+TitleBar.Parent = MainFrame
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Text = "Sora Hub | Fast Hatch"
+TitleText.Size = UDim2.new(1, -50, 1, 0)
+TitleText.Position = UDim2.new(0, 15, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.TextColor3 = ACCENT_COLOR
+TitleText.Font = Enum.Font.GothamBold
+TitleText.TextSize = 16
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text = "X"
+CloseBtn.Size = UDim2.new(0, 35, 0, 35)
+CloseBtn.Position = UDim2.new(1, -35, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+CloseBtn.Font = Enum.Font.Gotham
+CloseBtn.TextSize = 16
+CloseBtn.Parent = TitleBar
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- Debug Status Label (Bottom)
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 20)
+StatusLabel.Position = UDim2.new(0, 10, 1, -25)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: Idle"
+StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 10
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = MainFrame
+
+-- Sidebar
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 120, 1, -60)
+Sidebar.Position = UDim2.new(0, 0, 0, 36)
+Sidebar.BackgroundColor3 = SIDE_COLOR
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = MainFrame
+
+local SideCorner = Instance.new("UICorner")
+SideCorner.CornerRadius = UDim.new(0, 8)
+SideCorner.Parent = Sidebar
+
+local SidePatch = Instance.new("Frame")
+SidePatch.Size = UDim2.new(1, 0, 0, 10)
+SidePatch.BackgroundColor3 = SIDE_COLOR
+SidePatch.BorderSizePixel = 0
+SidePatch.Parent = Sidebar
+
+-- Container
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, -130, 1, -65)
+Container.Position = UDim2.new(0, 125, 0, 40)
+Container.BackgroundTransparency = 1
+Container.Parent = MainFrame
+
+--// 5. COMPONENT SYSTEM //--
+local Tabs = {}
+
+function CreateTab(name)
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(1, -10, 0, 32)
+    TabBtn.Position = UDim2.new(0, 5, 0, 0)
+    TabBtn.BackgroundColor3 = SIDE_COLOR 
+    TabBtn.AutoButtonColor = true
+    TabBtn.Text = name
+    TabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    TabBtn.Font = Enum.Font.GothamMedium
+    TabBtn.TextSize = 13
+    TabBtn.Parent = Sidebar
+    
+    local TabCorner = Instance.new("UICorner")
+    TabCorner.CornerRadius = UDim.new(0, 6)
+    TabCorner.Parent = TabBtn
+    
+    local TabPage = Instance.new("ScrollingFrame")
+    TabPage.Size = UDim2.new(1, 0, 1, 0)
+    TabPage.BackgroundTransparency = 1
+    TabPage.Visible = false
+    TabPage.ScrollBarThickness = 3
+    TabPage.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+    TabPage.Parent = Container
+    
+    local PL = Instance.new("UIListLayout")
+    PL.Parent = TabPage
+    PL.SortOrder = Enum.SortOrder.LayoutOrder
+    PL.Padding = UDim.new(0, 6)
+    
+    TabBtn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do
+            t.Btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+            t.Btn.BackgroundColor3 = SIDE_COLOR
+            t.Page.Visible = false
+        end
+        TabBtn.TextColor3 = ACCENT_COLOR
+        TabBtn.BackgroundColor3 = BG_COLOR
+        TabPage.Visible = true
+    end)
+    
+    table.insert(Tabs, {Btn = TabBtn, Page = TabPage})
+    return TabPage
+end
+
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.Parent = Sidebar
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabListLayout.Padding = UDim.new(0, 4)
+local TabPadding = Instance.new("UIPadding")
+TabPadding.Parent = Sidebar
+TabPadding.PaddingTop = UDim.new(0, 10)
+
+function CreateToggle(parent, text, default, callback)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = ITEM_COLOR
+    Frame.Parent = parent
+    local C = Instance.new("UICorner")
+    C.CornerRadius = UDim.new(0, 6)
+    C.Parent = Frame
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.7, 0, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = ACCENT_COLOR
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+    
+    local Status = Instance.new("Frame")
+    Status.Size = UDim2.new(0, 40, 0, 20)
+    Status.Position = UDim2.new(1, -50, 0.5, -10)
+    Status.BackgroundColor3 = default and BUTTON_COLOR or Color3.fromRGB(80, 80, 80)
+    Status.Parent = Frame
+    local SC = Instance.new("UICorner")
+    SC.CornerRadius = UDim.new(1, 0)
+    SC.Parent = Status
+    
+    local Dot = Instance.new("Frame")
+    Dot.Size = UDim2.new(0, 16, 0, 16)
+    Dot.Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    Dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Dot.Parent = Status
+    local DC = Instance.new("UICorner")
+    DC.CornerRadius = UDim.new(1, 0)
+    DC.Parent = Dot
+
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 1, 0)
+    Btn.BackgroundTransparency = 1
+    Btn.Text = ""
+    Btn.Parent = Frame
+    
+    local isOn = default
+    Btn.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        Status.BackgroundColor3 = isOn and BUTTON_COLOR or Color3.fromRGB(80, 80, 80)
+        Dot:TweenPosition(isOn and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8), "Out", "Quad", 0.1, true)
+        callback(isOn)
+    end)
+end
+
+function CreateDropdown(parent, text, options, callback)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = ITEM_COLOR
+    Frame.ClipsDescendants = true 
+    Frame.Parent = parent
+    local C = Instance.new("UICorner")
+    C.CornerRadius = UDim.new(0, 6)
+    C.Parent = Frame
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -30, 0, 32)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text .. ": Select..."
+    Label.TextColor3 = ACCENT_COLOR
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+    
+    local Arrow = Instance.new("TextLabel")
+    Arrow.Size = UDim2.new(0, 30, 0, 32)
+    Arrow.Position = UDim2.new(1, -30, 0, 0)
+    Arrow.BackgroundTransparency = 1
+    Arrow.Text = "v"
+    Arrow.TextColor3 = Color3.fromRGB(150, 150, 150)
+    Arrow.Font = Enum.Font.GothamBold
+    Arrow.Parent = Frame
+    
+    local Container = Instance.new("ScrollingFrame")
+    Container.Size = UDim2.new(1, 0, 1, -32) 
+    Container.Position = UDim2.new(0, 0, 0, 32)
+    Container.BackgroundColor3 = Color3.fromRGB(45, 45, 45) 
+    Container.BorderSizePixel = 0
+    Container.ScrollBarThickness = 2
+    Container.Visible = true
+    Container.Parent = Frame
+    
+    local CL = Instance.new("UIListLayout")
+    CL.Parent = Container
+    CL.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local isOpen = false
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, 32)
+    Btn.BackgroundTransparency = 1
+    Btn.Text = ""
+    Btn.Parent = Frame
+    
+    local function RefreshList(newOptions)
+        for _, c in pairs(Container:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        for i, opt in pairs(newOptions) do
+            local B = Instance.new("TextButton")
+            B.Size = UDim2.new(1, 0, 0, 25)
+            B.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            B.TextColor3 = Color3.fromRGB(200, 200, 200)
+            B.Text = tostring(opt)
+            B.Font = Enum.Font.Gotham
+            B.TextSize = 12
+            B.LayoutOrder = i
+            B.Parent = Container
+            B.MouseButton1Click:Connect(function()
+                Label.Text = text .. ": " .. tostring(opt)
+                isOpen = false
+                Frame:TweenSize(UDim2.new(1, 0, 0, 32), "Out", "Quad", 0.2, true)
+                callback(opt)
+            end)
+        end
+        Container.CanvasSize = UDim2.new(0, 0, 0, #newOptions * 25)
+    end
+    RefreshList(options)
+    
+    Btn.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        if isOpen then
+            Frame:TweenSize(UDim2.new(1, 0, 0, 150), "Out", "Quad", 0.2, true)
+        else
+            Frame:TweenSize(UDim2.new(1, 0, 0, 32), "Out", "Quad", 0.2, true)
+        end
+    end)
+    return RefreshList 
+end
+
+function CreateButton(parent, text, callback)
+    local Frame = Instance.new("TextButton")
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = BUTTON_COLOR
+    Frame.Text = text
+    Frame.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Frame.Font = Enum.Font.GothamBold
+    Frame.TextSize = 13
+    Frame.Parent = parent
+    local C = Instance.new("UICorner")
+    C.CornerRadius = UDim.new(0, 6)
+    C.Parent = Frame
+    Frame.MouseButton1Click:Connect(callback)
+end
+
+--// 6. BUILD TABS //--
+
+-- TAB 1: FARMING
+local FarmTab = CreateTab("Farming")
+Tabs[1].Btn.TextColor3 = ACCENT_COLOR; Tabs[1].Btn.BackgroundColor3 = BG_COLOR; Tabs[1].Page.Visible = true
+
+CreateToggle(FarmTab, "Auto Click", false, function(val) Settings.AutoClick = val end)
+
+-- TAB 2: EGG
+local EggTab = CreateTab("Egg")
+
+CreateToggle(EggTab, "Auto Teleport", true, function(val) Settings.AutoTp = val end)
+
+local UpdateEggList = CreateDropdown(EggTab, "Select Egg", {"Scanning..."}, function(val)
+    Settings.SelectedEgg = val
+    if Settings.AutoTp then TeleportToEgg(val) end
+end)
+
+CreateDropdown(EggTab, "Mode", {"1x", "3x", "8x"}, function(val)
+    Settings.HatchMode = tonumber(string.match(val, "%d+")) or 1
+end)
+
+CreateToggle(EggTab, "Auto Hatch (0.01s)", false, function(val) Settings.AutoHatch = val end)
+
+-- TAB 3: SETTINGS
+local SettingsTab = CreateTab("Settings")
+
+CreateToggle(SettingsTab, "Anti-AFK (24/7)", true, function(val) Settings.AntiAfk = val end)
+
+CreateButton(SettingsTab, "Save Config", function()
+    if writefile then
+        local json = HttpService:JSONEncode(Settings)
+        writefile("SoraHubConfig.json", json)
+    end
+end)
+
+--// 7. LOGIC LOOPS //--
+
+function TeleportToEgg(eggName)
+    local eggModel = nil
+    local f = workspace:FindFirstChild("Eggs") or workspace:FindFirstChild("EggCapsules")
+    if f then eggModel = f:FindFirstChild(eggName) end
+    if eggModel and eggModel:IsA("Model") and eggModel.PrimaryPart then
+        Players.LocalPlayer.Character:SetPrimaryPartCFrame(eggModel.PrimaryPart.CFrame * CFrame.new(0, 0, 5)) 
+    elseif eggModel and eggModel:IsA("Part") then
+        Players.LocalPlayer.Character:SetPrimaryPartCFrame(eggModel.CFrame * CFrame.new(0, 0, 5))
+    end
+end
+
+-- AUTO REFRESH
+local lastEggCount = -1
+task.spawn(function()
+    while true do
+        wait(1)
+        local eggs = {}
+        local f = workspace:FindFirstChild("Eggs") or workspace:FindFirstChild("EggCapsules")
+        if f then
+            for _, v in pairs(f:GetChildren()) do
+                if v:IsA("Model") or v:IsA("Part") then table.insert(eggs, v.Name) end
+            end
+        end
+        if #eggs ~= lastEggCount then
+            table.sort(eggs)
+            UpdateEggList(eggs)
+            lastEggCount = #eggs
+        end
+    end
+end)
+
+-- INPUT SIMULATION
+task.spawn(function()
+    while true do
+        wait(60) 
+        if Settings.AntiAfk then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new(999, 999))
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if Settings.AutoClick then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton1(Vector2.new(999, 999))
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- FAST HATCH LOOP (0.01s Logic)
+task.spawn(function()
+    while true do
+        -- Use Heartbeat for max speed (approx 0.01s)
+        RunService.Heartbeat:Wait()
+        
+        if Settings.AutoHatch then
+            if Remote_OpenEgg and Settings.SelectedEgg ~= "None" then
+                StatusLabel.Text = "Hatching: " .. Settings.SelectedEgg .. " (" .. Settings.HatchMode .. "x)"
+                
+                -- Fast Spam Logic (No pcall wait)
+                task.spawn(function()
+                    if Remote_OpenEgg:IsA("RemoteFunction") then
+                         -- InvokeServer yields, so we wrap it to not block the loop
+                        Remote_OpenEgg:InvokeServer(Settings.SelectedEgg, Settings.HatchMode)
+                    else
+                        Remote_OpenEgg:FireServer(Settings.SelectedEgg, Settings.HatchMode)
+                    end
+                end)
+            else
+                StatusLabel.Text = "Status: Waiting for Egg Selection..."
+            end
+        else
+            StatusLabel.Text = "Status: Idle"
+        end
+    end
+end)
+
+--// 8. CLEAN OPEN BUTTON //--
+local OpenBtn = Instance.new("TextButton")
+OpenBtn.Name = "OpenButton"
+OpenBtn.Size = UDim2.new(0, 50, 0, 50)
+OpenBtn.Position = UDim2.new(0, 15, 0, 15)
+OpenBtn.BackgroundColor3 = BG_COLOR
+OpenBtn.Text = "Menu"
+OpenBtn.TextColor3 = ACCENT_COLOR
+OpenBtn.Font = Enum.Font.GothamBold
+OpenBtn.TextSize = 12
+OpenBtn.Parent = ScreenGui
+local OBC = Instance.new("UICorner")
+OBC.CornerRadius = UDim.new(0, 8)
+OBC.Parent = OpenBtn
+
+OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+
+local function Drag(frame)
+    local dragToggle, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragToggle = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragToggle = false end end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            if dragToggle then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+end
+Drag(MainFrame)
+Drag(OpenBtn)
