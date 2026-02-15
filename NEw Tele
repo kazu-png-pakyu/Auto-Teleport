@@ -2,7 +2,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 -- Variables
 local player = Players.LocalPlayer
@@ -21,34 +20,44 @@ local backpack = player:WaitForChild("Backpack")
 
 print("Character and backpack loaded")
 
--- Find the remotes (Using Safe Call)
+-- Find the remotes
 local plazaRemote
 local mainWorldRemote
 
 local success = pcall(function()
-    plazaRemote = ReplicatedStorage:WaitForChild("GameEvents", 5)
-        and ReplicatedStorage.GameEvents:WaitForChild("TradeWorld", 5)
-        and ReplicatedStorage.GameEvents.TradeWorld:WaitForChild("TravelToTradeWorld", 5)
+    plazaRemote = ReplicatedStorage:WaitForChild("GameEvents", 10)
+        :WaitForChild("TradeWorld", 10)
+        :WaitForChild("TravelToTradeWorld", 10)
 end)
 
 local successMain = pcall(function()
-    mainWorldRemote = ReplicatedStorage:WaitForChild("GameEvents", 5)
-        and ReplicatedStorage.GameEvents:WaitForChild("TradeWorld", 5)
-        and ReplicatedStorage.GameEvents.TradeWorld:WaitForChild("TravelToMainWorld", 5)
+    mainWorldRemote = ReplicatedStorage:WaitForChild("GameEvents", 10)
+        :WaitForChild("TradeWorld", 10)
+        :WaitForChild("TravelToMainWorld", 10)
 end)
 
-if plazaRemote then print("✅ Plaza Remote found") else warn("⚠️ Plaza Remote not found (Check game updates)") end
-if mainWorldRemote then print("✅ Main World Remote found") else warn("⚠️ Main World Remote not found") end
+if plazaRemote then
+    print("✅ Plaza Remote found:", plazaRemote:GetFullName())
+else
+    warn("❌ Plaza Remote not found")
+end
+
+if mainWorldRemote then
+    print("✅ Main World Remote found:", mainWorldRemote:GetFullName())
+else
+    warn("❌ Main World Remote not found")
+end
 
 -- Teleport control
 local joinInProgress = false
-local currentLocation = "Unknown" 
+local currentLocation = "Unknown" -- Will be detected on startup
 
 -- ONE-TIME TELEPORT SYSTEM
-local hasAutoTeleportedToPlaza = false 
-local hasAutoTeleportedFromPlaza = false 
+-- This prevents auto-teleport after the first time, even with auto-execute
+local hasAutoTeleportedToPlaza = false -- Will only auto-teleport to Plaza ONCE per session
+local hasAutoTeleportedFromPlaza = false -- Will only auto-teleport from Plaza ONCE per session
 
--- GUI CREATION
+-- Create GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "InventoryTeleportGui"
 screenGui.ResetOnSpawn = false
@@ -60,6 +69,7 @@ local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 280, 0, 210)
 mainFrame.Position = UDim2.new(0.5, -140, 0.1, 0)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 mainFrame.BorderSizePixel = 2
 mainFrame.BorderColor3 = Color3.fromRGB(255, 170, 0)
@@ -74,11 +84,13 @@ corner.Parent = mainFrame
 -- Title
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, 0, 0, 30)
-titleLabel.Text = "Auto Pet Teleport"
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
 titleLabel.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+titleLabel.BorderSizePixel = 0
+titleLabel.Text = "Auto Inventory Teleport"
 titleLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 16
+titleLabel.Font = Enum.Font.GothamBold
 titleLabel.Parent = mainFrame
 
 local titleCorner = Instance.new("UICorner")
@@ -90,19 +102,25 @@ local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 28, 0, 20)
 closeButton.Position = UDim2.new(1, -34, 0, 5)
 closeButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+closeButton.BorderSizePixel = 0
 closeButton.Text = "X"
 closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = mainFrame
-Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 6)
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeButton
 
 -- Inventory Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -20, 0, 25)
 statusLabel.Position = UDim2.new(0, 10, 0, 40)
 statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Pets: Loading..."
+statusLabel.Text = "Inventory: 0/" .. MAX_INVENTORY_SIZE
 statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.TextSize = 14
 statusLabel.Font = Enum.Font.Gotham
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Parent = mainFrame
@@ -114,6 +132,7 @@ locationLabel.Position = UDim2.new(0, 10, 0, 65)
 locationLabel.BackgroundTransparency = 1
 locationLabel.Text = "📍 Location: Detecting..."
 locationLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+locationLabel.TextSize = 12
 locationLabel.Font = Enum.Font.GothamBold
 locationLabel.TextXAlignment = Enum.TextXAlignment.Left
 locationLabel.Parent = mainFrame
@@ -125,6 +144,7 @@ autoStatusLabel.Position = UDim2.new(0, 10, 0, 85)
 autoStatusLabel.BackgroundTransparency = 1
 autoStatusLabel.Text = "⚙️ Auto: Monitoring..."
 autoStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+autoStatusLabel.TextSize = 10
 autoStatusLabel.Font = Enum.Font.Gotham
 autoStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 autoStatusLabel.Parent = mainFrame
@@ -134,181 +154,378 @@ local teleportButton = Instance.new("TextButton")
 teleportButton.Size = UDim2.new(0, 250, 0, 35)
 teleportButton.Position = UDim2.new(0, 15, 0, 110)
 teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+teleportButton.BorderSizePixel = 0
 teleportButton.Text = "Teleport to Plaza"
 teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+teleportButton.TextSize = 14
 teleportButton.Font = Enum.Font.GothamBold
 teleportButton.Parent = mainFrame
-Instance.new("UICorner", teleportButton).CornerRadius = UDim.new(0, 6)
+
+local teleportCorner = Instance.new("UICorner")
+teleportCorner.CornerRadius = UDim.new(0, 6)
+teleportCorner.Parent = teleportButton
 
 -- Return to Garden Button
 local returnButton = Instance.new("TextButton")
 returnButton.Size = UDim2.new(0, 250, 0, 35)
 returnButton.Position = UDim2.new(0, 15, 0, 155)
 returnButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+returnButton.BorderSizePixel = 0
 returnButton.Text = "Return to Garden"
 returnButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+returnButton.TextSize = 14
 returnButton.Font = Enum.Font.GothamBold
 returnButton.Parent = mainFrame
-Instance.new("UICorner", returnButton).CornerRadius = UDim.new(0, 6)
 
--- --- FIXED INVENTORY FUNCTION ---
-local function getInventoryCount()
-    local count = 0
-    
-    -- CHECK 1: Look for a specific "Pets" folder inside the Player (Common in Simulators)
-    local petsFolder = player:FindFirstChild("Pets")
-    if petsFolder then
-        return #petsFolder:GetChildren()
-    end
-    
-    -- CHECK 2: Look for specific folders in ReplicatedStorage (Some games store data there)
-    -- (You can add specific game folder logic here if needed)
+local returnCorner = Instance.new("UICorner")
+returnCorner.CornerRadius = UDim.new(0, 6)
+returnCorner.Parent = returnButton
 
-    -- CHECK 3: Fallback to Backpack, but filter strictly
-    if backpack then
-        local items = backpack:GetChildren()
-        for _, item in pairs(items) do
-            -- Filter out scripts and hidden objects, only count Tools
-            if item:IsA("Tool") then
-                -- Optional: If your pets have a specific name, uncomment the line below
-                -- if item.Name:find("Cat") or item.Name:find("Dog") then 
-                    count = count + 1
-                -- end
-            end
-        end
-    end
-    
-    return count
-end
--- ------------------------------
+print("GUI created successfully")
 
+-- ENHANCED LOCATION DETECTION FUNCTION
 local function detectCurrentLocation()
-    if Workspace:FindFirstChild("Plaza") or Workspace:FindFirstChild("TradeWorld") then
+    -- METHOD 1: Check for specific workspace objects
+    -- CUSTOMIZE THESE based on your game's actual structure!
+    
+    -- Check for Plaza/Trade World indicators
+    if Workspace:FindFirstChild("Plaza") then
         return "Plaza"
     end
     
-    -- Check height (Y Position) - Standard trick for multi-world games
-    if character and character.PrimaryPart and character.PrimaryPart.Position.Y > 500 then
-        return "Plaza" -- Often floating islands or sky maps
+    if Workspace:FindFirstChild("TradeWorld") then
+        return "Plaza"
     end
-
+    
+    -- Check for Garden/Main World indicators
+    if Workspace:FindFirstChild("Garden") then
+        return "Garden"
+    end
+    
+    if Workspace:FindFirstChild("MainWorld") then
+        return "Garden"
+    end
+    
+    if Workspace:FindFirstChild("Map") then
+        return "Garden"
+    end
+    
+    -- METHOD 2: Check player position (if worlds are at different heights)
+    if character and character.PrimaryPart then
+        local yPos = character.PrimaryPart.Position.Y
+        
+        -- Adjust these values based on your game!
+        -- Example: Plaza might be at Y > 500, Garden at Y < 500
+        if yPos > 500 then
+            return "Plaza"
+        else
+            return "Garden"
+        end
+    end
+    
+    -- METHOD 3: Check for NPCs or unique objects
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        local name = obj.Name:lower()
+        
+        -- Plaza indicators
+        if name:find("trader") or name:find("tradeshop") or name:find("plaza") then
+            return "Plaza"
+        end
+        
+        -- Garden indicators  
+        if name:find("plant") or name:find("farm") or name:find("garden") then
+            return "Garden"
+        end
+    end
+    
+    -- Default: assume Garden
     return "Garden"
 end
 
-local function updateGui()
-    local currentCount = getInventoryCount()
-    statusLabel.Text = "Pets: " .. currentCount .. "/" .. MAX_INVENTORY_SIZE
-    
-    if currentLocation == "Plaza" then
-        locationLabel.Text = "📍 Location: Plaza"
-        locationLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
-    else
-        locationLabel.Text = "📍 Location: Garden"
-        locationLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    end
-    
-    -- Logic for Auto Status Text
-    if isInventoryFull() then
-        statusLabel.TextColor3 = Color3.fromRGB(255, 85, 85)
-    else
-        statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+-- Function to continuously update location
+local function updateLocation()
+    local newLocation = detectCurrentLocation()
+    if newLocation ~= currentLocation then
+        print("🔄 Location changed:", currentLocation, "→", newLocation)
+        currentLocation = newLocation
+        updateGui()
     end
 end
 
-function isInventoryFull()
+-- INVENTORY FUNCTIONS
+local function getInventoryCount()
+    local itemCount = 0
+    if backpack then
+        for _, item in pairs(backpack:GetChildren()) do
+            -- Count items with "KG" or "kg" in name
+            if item.Name:find("KG") or item.Name:find("kg") then
+                itemCount = itemCount + 1
+            end
+        end
+    end
+    return itemCount
+end
+
+local function isInventoryFull()
     return getInventoryCount() >= MAX_INVENTORY_SIZE
 end
 
--- Teleport Functions
-local function teleportToPlaza()
-    if currentLocation == "Plaza" then return end
-    if joinInProgress then return end
+-- UPDATE GUI FUNCTION
+local function updateGui()
+    local currentCount = getInventoryCount()
+    statusLabel.Text = "Inventory: " .. currentCount .. "/" .. MAX_INVENTORY_SIZE
     
-    joinInProgress = true
-    teleportButton.Text = "Teleporting..."
-    
-    if plazaRemote then
-        pcall(function() plazaRemote:FireServer() end)
+    -- Update location display
+    if currentLocation == "Plaza" then
+        locationLabel.Text = "📍 Location: Plaza (Trade World)"
+        locationLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
+    elseif currentLocation == "Garden" then
+        locationLabel.Text = "📍 Location: Garden (Main World)"
+        locationLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
     else
-        -- Fallback: Try to find a teleporter pad if remote fails
-        print("Remote failed, looking for physical teleporter...")
+        locationLabel.Text = "📍 Location: " .. currentLocation
+        locationLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     end
     
-    task.wait(2)
-    joinInProgress = false
-    teleportButton.Text = "Teleport to Plaza"
+    -- Update inventory status
+    if isInventoryFull() then
+        statusLabel.TextColor3 = Color3.fromRGB(255, 85, 85)
+        if currentLocation ~= "Plaza" then
+            teleportButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+            teleportButton.Text = "INVENTORY FULL - GO TO PLAZA!"
+        else
+            teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+            teleportButton.Text = "Already in Plaza"
+        end
+    else
+        statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        if currentLocation ~= "Plaza" then
+            teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+            teleportButton.Text = "Teleport to Plaza"
+        else
+            teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+            teleportButton.Text = "Already in Plaza"
+        end
+    end
+    
+    -- Update return button based on location
+    if currentLocation == "Garden" then
+        returnButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        returnButton.Text = "Already in Garden"
+    else
+        returnButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        returnButton.Text = "Return to Garden"
+    end
+    
+    -- Update auto-status
+    if currentLocation == "Garden" then
+        if currentCount >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Ready to go to Plaza (1x)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+        elseif currentCount >= MAX_INVENTORY_SIZE and hasAutoTeleportedToPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Used (manual teleport only)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        else
+            autoStatusLabel.Text = "⚙️ Auto: Farming... (" .. currentCount .. "/" .. MAX_INVENTORY_SIZE .. ")"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        end
+    elseif currentLocation == "Plaza" then
+        if currentCount <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Ready to return to Garden (1x)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+        elseif currentCount <= RETURN_THRESHOLD and hasAutoTeleportedFromPlaza then
+            autoStatusLabel.Text = "⚙️ Auto: Used (manual teleport only)"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        else
+            autoStatusLabel.Text = "⚙️ Auto: Trading... (" .. currentCount .. " > " .. RETURN_THRESHOLD .. ")"
+            autoStatusLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+        end
+    end
+end
+
+-- TELEPORT FUNCTIONS
+local function teleportToPlaza()
+    -- ✅ ENHANCED: Check if already in Plaza before attempting teleport
+    if currentLocation == "Plaza" then
+        print("ℹ️ Already in Plaza - skipping teleport")
+        teleportButton.Text = "Already in Plaza"
+        teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        task.wait(1.5)
+        updateGui()
+        return
+    end
+    
+    if joinInProgress then
+        print("⏳ Teleport already in progress")
+        return
+    end
+    
+    if not plazaRemote then
+        warn("❌ Plaza remote not found!")
+        return
+    end
+    
+    joinInProgress = true
+    teleportButton.Text = "Teleporting to Plaza..."
+    teleportButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+    
+    local success, err = pcall(function()
+        plazaRemote:FireServer()
+    end)
+    
+    if success then
+        print("✅ Teleport request sent to Plaza!")
+        print("🔄 Server will restart - script will reload automatically")
+    else
+        warn("❌ Teleport error:", err)
+        task.wait(2)
+        joinInProgress = false
+        updateGui()
+    end
 end
 
 local function teleportToGarden()
-    if currentLocation == "Garden" then return end
-    if joinInProgress then return end
+    -- ✅ ENHANCED: Check if already in Garden before attempting teleport
+    if currentLocation == "Garden" then
+        print("ℹ️ Already in Garden - skipping teleport")
+        returnButton.Text = "Already in Garden"
+        returnButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        task.wait(1.5)
+        updateGui()
+        return
+    end
+    
+    if joinInProgress then
+        print("⏳ Teleport already in progress")
+        return
+    end
+    
+    if not mainWorldRemote then
+        warn("❌ Garden remote not found!")
+        return
+    end
     
     joinInProgress = true
-    returnButton.Text = "Returning..."
+    returnButton.Text = "Returning to Garden..."
+    returnButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
     
-    if mainWorldRemote then
-        pcall(function() mainWorldRemote:FireServer() end)
+    local success, err = pcall(function()
+        mainWorldRemote:FireServer()
+    end)
+    
+    if success then
+        print("✅ Teleport request sent to Garden!")
+        print("🔄 Server will restart - script will reload automatically")
+    else
+        warn("❌ Teleport error:", err)
+        task.wait(2)
+        joinInProgress = false
+        updateGui()
     end
-    
-    task.wait(2)
-    joinInProgress = false
-    returnButton.Text = "Return to Garden"
 end
 
--- Button Events
-teleportButton.MouseButton1Click:Connect(teleportToPlaza)
-returnButton.MouseButton1Click:Connect(teleportToGarden)
-closeButton.MouseButton1Click:Connect(function() screenGui.Enabled = false end)
+-- BUTTON EVENTS
+teleportButton.MouseButton1Click:Connect(function()
+    print("🖱️ Plaza button clicked")
+    teleportToPlaza()
+end)
 
--- Update Loop
+returnButton.MouseButton1Click:Connect(function()
+    print("🖱️ Garden button clicked")
+    teleportToGarden()
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    screenGui.Enabled = false
+    print("GUI closed")
+end)
+
+-- BACKPACK MONITORING
+if backpack then
+    backpack.ChildAdded:Connect(function(child)
+        updateGui()
+    end)
+    
+    backpack.ChildRemoved:Connect(function(child)
+        updateGui()
+    end)
+end
+
+-- CHARACTER RESPAWN
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    backpack = player:WaitForChild("Backpack")
+    task.wait(2)
+    updateLocation()
+    print("🔄 Character respawned - Location:", currentLocation)
+    updateGui()
+end)
+
+-- ✅ NEW: Continuous location monitoring
 task.spawn(function()
     while true do
-        task.wait(1)
-        currentLocation = detectCurrentLocation()
-        local count = getInventoryCount()
+        task.wait(3) -- Check location every 3 seconds
+        updateLocation()
+    end
+end)
+
+-- INITIAL SETUP
+task.wait(2) -- Wait for world to fully load
+currentLocation = detectCurrentLocation()
+print("🎮 Initial location detected:", currentLocation)
+print("📦 Initial inventory:", getInventoryCount())
+updateGui()
+
+-- MAIN AUTO-TELEPORT LOOP
+task.spawn(function()
+    while AUTO_TELEPORT do
+        task.wait(2) -- Check every 2 seconds
+        
+        -- ✅ Update location before checking conditions
+        updateLocation()
+        
+        local currentInventory = getInventoryCount()
+        
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("📊 AUTO-CHECK")
+        print("   Location:", currentLocation)
+        print("   Inventory:", currentInventory .. "/" .. MAX_INVENTORY_SIZE)
+        print("   hasAutoTeleportedToPlaza:", hasAutoTeleportedToPlaza)
+        print("   hasAutoTeleportedFromPlaza:", hasAutoTeleportedFromPlaza)
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        -- ✅ RULE 1: If in Garden and inventory is FULL → Go to Plaza (ONLY ONCE)
+        -- Will NOT trigger if currentLocation == "Plaza"
+        if currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
+            print("🚨 TRIGGER: Inventory FULL in Garden → Going to Plaza (ONE TIME)")
+            hasAutoTeleportedToPlaza = true
+            teleportToPlaza()
+        elseif currentLocation == "Garden" and currentInventory >= MAX_INVENTORY_SIZE and hasAutoTeleportedToPlaza then
+            print("⏹️ Auto-teleport to Plaza already used. Manual teleport only.")
+        elseif currentLocation == "Plaza" and currentInventory >= MAX_INVENTORY_SIZE then
+            print("✅ Already in Plaza - no need to teleport")
+        end
+        
+        -- ✅ RULE 2: If in Plaza and inventory is ≤ RETURN_THRESHOLD → Return to Garden (ONLY ONCE)
+        -- Will NOT trigger if currentLocation == "Garden"
+        if currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
+            print("🌱 TRIGGER: Inventory ≤" .. RETURN_THRESHOLD .. " in Plaza → Returning to Garden (ONE TIME)")
+            hasAutoTeleportedFromPlaza = true
+            teleportToGarden()
+        elseif currentLocation == "Plaza" and currentInventory <= RETURN_THRESHOLD and hasAutoTeleportedFromPlaza then
+            print("⏹️ Auto-teleport from Plaza already used. Manual teleport only.")
+        elseif currentLocation == "Garden" and currentInventory <= RETURN_THRESHOLD then
+            print("✅ Already in Garden - no need to teleport")
+        end
         
         updateGui()
-        
-        if AUTO_TELEPORT then
-            -- Go to Plaza logic
-            if currentLocation == "Garden" and count >= MAX_INVENTORY_SIZE and not hasAutoTeleportedToPlaza then
-                hasAutoTeleportedToPlaza = true
-                teleportToPlaza()
-            end
-            
-            -- Return to Garden logic
-            if currentLocation == "Plaza" and count <= RETURN_THRESHOLD and not hasAutoTeleportedFromPlaza then
-                hasAutoTeleportedFromPlaza = true
-                teleportToGarden()
-            end
-        end
     end
 end)
 
--- Character Reset Handler
-player.CharacterAdded:Connect(function(newChar)
-    character = newChar
-    backpack = player:WaitForChild("Backpack")
-    task.wait(1)
-    currentLocation = detectCurrentLocation()
-end)
-
-print("=== ✅ FIXED SCRIPT LOADED ===")
--- DEBUG: Run this once to see what we are counting
-task.spawn(function()
-    task.wait(2)
-    print("--- DEBUG INVENTORY CHECK ---")
-    local petsFolder = player:FindFirstChild("Pets")
-    if petsFolder then
-        print("Found 'Pets' folder! Count:", #petsFolder:GetChildren())
-    else
-        print("No 'Pets' folder found. Checking Backpack...")
-        if backpack then
-            print("Backpack Items found:")
-            for _, v in pairs(backpack:GetChildren()) do
-                print("- " .. v.Name .. " (" .. v.ClassName .. ")")
-            end
-        end
-    end
-    print("-----------------------------")
-end)
+print("=== ✅ AUTO INVENTORY TELEPORT LOADED ===")
+print("📍 Current Location:", currentLocation)
+print("⚙️ Auto-teleport: ENABLED")
+print("📦 Full inventory trigger:", MAX_INVENTORY_SIZE)
+print("🔙 Return trigger:", RETURN_THRESHOLD)
+print("🚫 Anti-duplicate teleport: ENABLED")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
