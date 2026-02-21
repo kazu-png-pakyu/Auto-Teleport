@@ -219,43 +219,19 @@ local function getPetQuantity()
                 -- Debug: Print item name
                 print("🐾 DEBUG - Pet item found:", item.Name)
                 
-                -- Extract number from name (e.g., "Pet 1.28 KG" -> 1.28)
-                local numberFound = false
-                
-                -- Try to find decimal numbers (e.g., 1.28, 2.5)
-                for number in string.gmatch(item.Name, "(%d+%.%d+)") do
-                    local amount = tonumber(number)
-                    if amount then
-                        print("   Found decimal quantity:", amount)
-                        petQuantity = petQuantity + amount
-                        numberFound = true
-                        break
-                    end
-                end
-                
-                -- If no decimal found, try to find whole numbers
-                if not numberFound then
-                    for number in string.gmatch(item.Name, "(%d+)") do
-                        local amount = tonumber(number)
-                        if amount then
-                            print("   Found whole quantity:", amount)
-                            petQuantity = petQuantity + amount
-                            numberFound = true
-                            break
-                        end
-                    end
-                end
-                
-                -- If still no number found, count as 1
-                if not numberFound then
-                    print("   No quantity found in name, counting as 1")
-                    petQuantity = petQuantity + 1
-                end
+                -- Each pet with KG counts as +1
+                petQuantity = petQuantity + 1
+                print("   Counted as: 1 (Total so far:", petQuantity .. ")")
             end
         end
     end
-    print("🐾 TOTAL Pet Quantity:", petQuantity)
-    return petQuantity
+    
+    -- Adjust by -50 for stability
+    local adjustedQuantity = petQuantity - 50
+    print("🐾 Raw Pet Count:", petQuantity)
+    print("🐾 Adjusted Pet Quantity (- 50):", adjustedQuantity)
+    
+    return adjustedQuantity
 end
 
 local function updateGui()
