@@ -215,10 +215,36 @@ local function getPetQuantity()
     if backpack then
         for _, item in pairs(backpack:GetChildren()) do
             if item.Name:find("Pet") or item.Name:find("pet") then
-                petQuantity = petQuantity + 1
+                -- Debug: Print item structure
+                print("🐾 DEBUG - Pet item found:", item.Name)
+                print("   Children:", item:GetChildren())
+                
+                -- Try to get the quantity/amount from the item
+                if item:FindFirstChild("Quantity") then
+                    local amount = item.Quantity.Value
+                    print("   Found Quantity:", amount)
+                    petQuantity = petQuantity + amount
+                elseif item:FindFirstChild("Amount") then
+                    local amount = item.Amount.Value
+                    print("   Found Amount:", amount)
+                    petQuantity = petQuantity + amount
+                elseif item:FindFirstChild("Value") then
+                    local amount = item.Value.Value
+                    print("   Found Value:", amount)
+                    petQuantity = petQuantity + amount
+                elseif item:FindFirstChild("Count") then
+                    local amount = item.Count.Value
+                    print("   Found Count:", amount)
+                    petQuantity = petQuantity + amount
+                else
+                    -- If no quantity found, assume it's 1 pet
+                    print("   No quantity child found, counting as 1")
+                    petQuantity = petQuantity + 1
+                end
             end
         end
     end
+    print("🐾 TOTAL Pet Quantity:", petQuantity)
     return petQuantity
 end
 
