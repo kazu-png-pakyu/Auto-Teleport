@@ -214,31 +214,41 @@ local function getPetQuantity()
     local petQuantity = 0
     if backpack then
         for _, item in pairs(backpack:GetChildren()) do
-            if item.Name:find("Pet") or item.Name:find("pet") then
-                -- Debug: Print item structure
+            -- Only count items that have "KG" or "kg" in the name (real pets)
+            if item.Name:find("KG") or item.Name:find("kg") then
+                -- Debug: Print item name
                 print("🐾 DEBUG - Pet item found:", item.Name)
-                print("   Children:", item:GetChildren())
                 
-                -- Try to get the quantity/amount from the item
-                if item:FindFirstChild("Quantity") then
-                    local amount = item.Quantity.Value
-                    print("   Found Quantity:", amount)
-                    petQuantity = petQuantity + amount
-                elseif item:FindFirstChild("Amount") then
-                    local amount = item.Amount.Value
-                    print("   Found Amount:", amount)
-                    petQuantity = petQuantity + amount
-                elseif item:FindFirstChild("Value") then
-                    local amount = item.Value.Value
-                    print("   Found Value:", amount)
-                    petQuantity = petQuantity + amount
-                elseif item:FindFirstChild("Count") then
-                    local amount = item.Count.Value
-                    print("   Found Count:", amount)
-                    petQuantity = petQuantity + amount
-                else
-                    -- If no quantity found, assume it's 1 pet
-                    print("   No quantity child found, counting as 1")
+                -- Extract number from name (e.g., "Pet 1.28 KG" -> 1.28)
+                local numberFound = false
+                
+                -- Try to find decimal numbers (e.g., 1.28, 2.5)
+                for number in string.gmatch(item.Name, "(%d+%.%d+)") do
+                    local amount = tonumber(number)
+                    if amount then
+                        print("   Found decimal quantity:", amount)
+                        petQuantity = petQuantity + amount
+                        numberFound = true
+                        break
+                    end
+                end
+                
+                -- If no decimal found, try to find whole numbers
+                if not numberFound then
+                    for number in string.gmatch(item.Name, "(%d+)") do
+                        local amount = tonumber(number)
+                        if amount then
+                            print("   Found whole quantity:", amount)
+                            petQuantity = petQuantity + amount
+                            numberFound = true
+                            break
+                        end
+                    end
+                end
+                
+                -- If still no number found, count as 1
+                if not numberFound then
+                    print("   No quantity found in name, counting as 1")
                     petQuantity = petQuantity + 1
                 end
             end
