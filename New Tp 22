@@ -11,8 +11,8 @@ print("Script started - Player found:", player.Name)
 -- Configuration
 local MAX_INVENTORY_SIZE = 235 -- Set your inventory size limit here
 local AUTO_TELEPORT = true -- Set to false if you only want manual teleport
-local RETURN_THRESHOLD = 100 -- Teleport back to Main World when inventory reaches this amount
-local PET_RETURN_THRESHOLD = 100 -- Teleport back to Main World when pet quantity drops below this amount
+local RETURN_THRESHOLD = 120 -- Teleport back to Main World when inventory reaches this amount
+local PET_RETURN_THRESHOLD = 120 -- Teleport back to Main World when pet quantity drops below this amount
 
 -- Wait for character
 local character = player.Character or player.CharacterAdded:Wait()
