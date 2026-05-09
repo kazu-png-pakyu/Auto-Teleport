@@ -91,11 +91,18 @@ local Window = Fluent:CreateWindow({
 	Title = "🎯 Snipe Pets",
 	SubTitle = "Premium Pet Sniping Tool",
 	TabWidth = 160,
-	Size = UDim2.new(0, 800, 0, 600),
+	Size = UDim2.new(0, 900, 0, 700),
 	Acrylic = true,
 	Theme = "Dark",
 	MinimizeKey = Enum.KeyCode.LeftControl
 })
+
+-- Add minimize button
+Window:AddLabel("Press LeftControl to minimize")
+
+-- Make window draggable and resizable
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- ===== PETS TAB =====
 local PetsTab = Window:AddTab({
@@ -105,14 +112,18 @@ local PetsTab = Window:AddTab({
 
 PetsTab:AddLabel("Selected Pets: None")
 
-PetsTab:AddDropdown("PetSelect", {
+PetsTab:AddMultiselect("PetSelect", {
 	Title = "Select Pets",
-	Values = PET_LIST,
-	Multi = true,
-	Default = 1,
+	Options = PET_LIST,
+	Default = {},
 	Callback = function(Value)
 		selectedPets = Value
-		print("Selected pets:", table.concat(Value, ", "))
+		if #Value > 0 then
+			PetsTab:FindChild("Label"):Set("Selected Pets: " .. table.concat(Value, ", "):sub(1, 50) .. "...")
+		else
+			PetsTab:FindChild("Label"):Set("Selected Pets: None")
+		end
+		print("Selected pets:", #Value)
 	end
 })
 
@@ -121,7 +132,7 @@ PetsTab:AddInput("SearchPet", {
 	Default = "",
 	Placeholder = "Type pet name...",
 	Numeric = false,
-	Finished = false,
+	Finished = true,
 	Callback = function(Value)
 		print("Searching for:", Value)
 	end
@@ -152,7 +163,7 @@ PetsTab:AddInput("BaseKG", {
 	Default = "0",
 	Placeholder = "Enter KG...",
 	Numeric = true,
-	Finished = false,
+	Finished = true,
 	Callback = function(Value)
 		print("Base KG:", Value)
 	end
@@ -163,7 +174,7 @@ PetsTab:AddInput("BuyPrice", {
 	Default = "0",
 	Placeholder = "Enter max price...",
 	Numeric = true,
-	Finished = false,
+	Finished = true,
 	Callback = function(Value)
 		print("Max buy price:", Value)
 	end
@@ -184,12 +195,23 @@ BoothsTab:AddButton({
 	end
 })
 
-local LogLabel = BoothsTab:AddLabel("Click scan to find pets")
+BoothsTab:AddDivider()
+
+BoothsTab:AddLabel("Scan Results:")
+
+local LogSection = BoothsTab:AddSection("Detection Log")
+
+-- Create a text label for the log
+local logText = BoothsTab:AddLabel("Click scan to find pets")
 
 -- Update log display
 RunService.Heartbeat:Connect(function()
 	if #detectionLog > 0 then
-		LogLabel:Set(table.concat(detectionLog, "\n"))
+		local displayText = table.concat(detectionLog, "\n")
+		if #displayText > 500 then
+			displayText = displayText:sub(1, 500) .. "..."
+		end
+		logText:Set(displayText)
 	end
 end)
 
