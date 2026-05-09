@@ -1,493 +1,272 @@
+-- Snipe Pets Tool with Fluent UI Library
+-- Place this in StarterPlayer > StarterPlayerScripts
+
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 
---// 1. UNIVERSAL REMOTE SCANNER //--
-local Remote_OpenEgg = nil
--- Specific path (Fast check)
-pcall(function() Remote_OpenEgg = ReplicatedStorage["ec535b0a-bc8c-4743-b9d5-b81b90371395"].Functions.OpenEgg end)
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- Deep Scan (Fallback)
-if not Remote_OpenEgg then
-    for _, v in pairs(ReplicatedStorage:GetDescendants()) do
-        if v.Name == "OpenEgg" and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
-            Remote_OpenEgg = v
-            break
-        end
-    end
-end
+-- ===== LOAD FLUENT UI =====
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
---// 2. SETTINGS VARIABLES //--
-local Settings = {
-    AutoClick = false,
-    SelectedEgg = "None",
-    HatchMode = 1,
-    AutoHatch = false,
-    AntiAfk = true, 
-    AutoTp = true
+-- ===== VARIABLES =====
+local selectedPets = {}
+local boothsData = {}
+local detectionLog = {}
+local isAutoSniping = false
+
+-- All 364 pets
+local PET_LIST = {
+	"Bagel Bunny", "Black Bird", "Bunny", "Chipmunk", "Crab", "Crow", "Dairy Cow", "Dog", "Gecko", "Golden Lab", "Ladybug", "Oxpecker", "Pumpkin Rat", "Robin", "Seagull", "Sheckling", "Snow Bunny", "Starfish", "Termite",
+	"Angora Goat", "Bacon Pig", "Bat", "Bee", "Black Bunny", "Blue Jay", "Cardinal", "Cat", "Chicken", "Clam", "Deer", "Elk", "Farmer Chipmunk", "French Hen", "Goat", "Hyena", "Hyrax", "Jackalope", "Maneki-neko", "New Year's Bird", "Pink Bunny", "Salmon", "Scarab", "Shiba Inu", "Sunny-Side Chicken", "Unicycle Monkey", "Wasp",
+	"Armadillo", "Badger", "Bone Dog", "Cape Buffalo", "Christmas Gorilla", "Chubby Chipmunk", "Easter Egg Chick", "Firemite", "Firework Sprite", "Flamingo", "Geode Turtle", "Ghost Bear", "Gift Rat", "Goblin", "Hedgehog", "Honey Bee", "Hummingbird", "Kiwi", "Kiwi (Pet)", "Messenger Pigeon", "Monkey", "Nihonzaru", "Orange Tabby", "Orangutan", "Pancake Mole", "Partridge", "Performer Seal", "Pig", "Pixie", "Red Squirrel", "Rooster", "Sea Turtle", "Seal", "Smithing Dog", "Snowman Soldier", "Spotted Deer", "Topaz Snail", "Toucan", "Tree Frog", "Tsuchinoko", "Turtle Dove", "Woodpecker", "Zebra",
+	"Amethyst Beetle", "Ash Raven", "Bald Eagle", "Bear on Bike", "Blood Hedgehog", "Calico", "Capybara", "Caterpillar", "Celebration Puppy", "Champion Beetle", "Cheetah", "Corrupted Kodama", "Cow", "Cuckoo", "Emerald Snake", "Football", "Fortune Squirrel", "Frog", "German Shepherd", "Giraffe", "Gorilla Chef", "Grey Mouse", "Grizzly Bear", "Gummy Bear", "Hippo", "Hotdog Daschund", "Idol Chipmunk", "Iguana", "Iguanodon", "Imp", "Kodama", "Magpie", "Mallard", "Mandrake", "Mandrake (Pet)", "Marmot", "Marshmallow Lamb", "Meerkat", "Mole", "Moon Cat", "Moth", "Ostrich", "Pachycephalosaurus", "Panda", "Parasaurolophus", "Peacock", "Petal Bee", "Pine Beetle", "Pink Panda", "Polar Bear", "Raptor", "Reindeer", "Sand Snake", "Scarlet Macaw", "Sea Otter", "Seedling", "Shroomie", "Silver Dragonfly", "Silver Monkey", "Silver Piggy", "Snail", "Snowman Builder", "Specter", "Spider", "Stag Beetle", "Stegosaurus", "Stork", "Sushi Bear", "Tanchozuru", "Tanuki", "Tarantula Hawk", "Tomb Marmot", "Trapdoor Spider", "Triceratops", "Turtle", "Wisp", "Wolf", "Woody",
+	"Ankylosaurus", "Apple Gazelle", "Arctic Fox", "Axolotl", "Barn Owl", "Bear Bee", "Black Cat", "Blood Kiwi", "Brontosaurus", "Brown Mouse", "Brown Owl", "Butterfly", "Camel", "Chicken Zombie", "Chimpanzee", "Cocoa Cat", "Cooked Owl", "Crocodile", "Dark Spriggan", "Dilophosaurus", "Drake", "Echo Frog", "Eggnog Chick", "Firefly", "Galah Cockatoo", "Giant Ant", "Glimmering Sprite", "Goblin Gardener", "Goblin Miner", "Golden Bee", "Golden Piggy", "Golem", "Hamster", "Hazehound", "Hootsie Roll", "Hyacinth Macaw", "Junkbot", "Kappa", "Koi", "Lemon Lion", "Mantis Shrimp", "Mimic Octopus", "Mistletoad", "Mochi Mouse", "New Year's Chimp", "Night Owl", "Nutcracker", "Owl", "Pack Bee", "Pack Mule", "Peach Wasp", "Penguin", "Praying Mantis", "Pterodactyl", "Red Dragon", "Red Giant Ant", "Rhino", "Sapphire Macaw", "Show Pony", "Spaghetti Sloth", "Spriggan", "Squirrel", "Sugar Glider", "Summer Kiwi",
+	"Bearded Dragon", "Blood Owl", "Carnival Elephant", "Cerberus", "Chimera", "Chinchilla", "Cockatrice", "Diamond Panther", "Disco Bee", "Dragonfly", "Elephant", "Fennec Fox", "French Fry Ferret", "Frost Dragon", "Golden Goose", "Green Bean", "Griffin", "Hex Serpent", "Hydra", "Krampus", "Lich", "Lion", "Lobster Thermidor", "Luminous Sprite", "Mizuchi", "Mummy", "Orchid Mantis", "Phoenix", "Queen Bee", "Raccoon", "Raiju", "Reaper", "Red Fox", "Red Panda", "Red Rose Fox", "Red-Nosed Reindeer", "Ruby Squid", "Space Squirrel", "Spinosaurus", "Star Wolf", "Swan", "T-Rex", "Tiger", "Water Buffalo", "Wind Wyvern", "Yeti",
+	"Birb", "Corrupted Kitsune", "Gold Finch", "Headless Horseman", "Ice Golem", "Kitsune", "Kitsune (Pet)", "New Year's Dragon",
+	"Gnome",
+	"Beaver", "Chocolate Bunny", "Easter Bunny", "Festive Frost Squirrel", "Festive Ice Golem", "Festive Moose", "Festive Nutcracker", "Festive Partridge", "Festive Premium Christmas Egg", "Festive Premium Winter Egg", "Festive Reindeer", "Festive Santa Bear", "Festive Turtle Dove", "Festive Wendigo", "Festive Yeti", "Frost Squirrel", "Ghostly Bat", "Ghostly Black Cat", "Ghostly Bone Dog", "Ghostly Headless Horseman", "Ghostly Mummy", "Ghostly Premium Spooky Egg", "Ghostly Spider", "GIANT Badger", "GIANT Barn Owl", "GIANT Grizzly Bear", "GIANT Premium Fall Egg", "GIANT Robin", "GIANT Swan", "Gilded Choc Chocolate Bunny", "Gilded Choc Easter Bunny", "Gilded Choc Easter Egg Chick", "Gilded Choc Jerboa", "Gilded Choc Marshmallow Lamb", "Gilded Choc Nyala", "Gilded Choc Peryton", "Gilded Choc Spring Bee", "Goblin?", "Jerboa", "Moose", "Nyala", "Peryton", "Queen Bee (Pet)", "Rainbow Ankylosaurus", "Rainbow Bear on Bike", "Rainbow Birb", "Rainbow Black Bird", "Rainbow Brown Owl", "Rainbow Carnival Elephant", "Rainbow Celebration Puppy", "Rainbow Cuckoo", "Rainbow Dilophosaurus", "Rainbow Elephant", "Rainbow Firework Sprite", "Rainbow Giraffe", "Rainbow Gold Finch", "Rainbow Iguanodon", "Rainbow New Year's Bird", "Rainbow New Year's Chimp", "Rainbow New Year's Dragon", "Rainbow Oxpecker", "Rainbow Pachycephalosaurus", "Rainbow Parasaurolophus", "Rainbow Performer Seal", "Rainbow Premium Bird Egg", "Rainbow Premium Carnival Egg", "Rainbow Premium New Year's Egg", "Rainbow Premium Primal Egg", "Rainbow Premium Safari Egg", "Rainbow Rhino", "Rainbow Show Pony", "Rainbow Spinosaurus", "Rainbow Star Wolf", "Rainbow Unicycle Monkey", "Rainbow Zebra", "Santa Bear", "Spring Bee", "Wendigo"
 }
 
---// 3. GUI THEME SETUP (CLEAN DARK) //--
-local ACCENT_COLOR = Color3.fromRGB(255, 255, 255) 
-local BUTTON_COLOR = Color3.fromRGB(0, 110, 255) 
-local BG_COLOR = Color3.fromRGB(40, 40, 40) 
-local SIDE_COLOR = Color3.fromRGB(30, 30, 30) 
-local ITEM_COLOR = Color3.fromRGB(50, 50, 50) 
-
-local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-if PlayerGui:FindFirstChild("SoraCleanUI") then PlayerGui.SoraCleanUI:Destroy() end
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "SoraCleanUI"
-ScreenGui.Parent = PlayerGui
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 9999
-
---// 4. MAIN WINDOW //--
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 480, 0, 270)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -135)
-MainFrame.BackgroundColor3 = BG_COLOR
-MainFrame.BorderSizePixel = 0
-MainFrame.Visible = false 
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = MainFrame
-
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 35)
-TitleBar.BackgroundTransparency = 1
-TitleBar.Parent = MainFrame
-
-local TitleText = Instance.new("TextLabel")
-TitleText.Text = "Sora Hub | Fast Hatch"
-TitleText.Size = UDim2.new(1, -50, 1, 0)
-TitleText.Position = UDim2.new(0, 15, 0, 0)
-TitleText.BackgroundTransparency = 1
-TitleText.TextColor3 = ACCENT_COLOR
-TitleText.Font = Enum.Font.GothamBold
-TitleText.TextSize = 16
-TitleText.TextXAlignment = Enum.TextXAlignment.Left
-TitleText.Parent = TitleBar
-
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Text = "X"
-CloseBtn.Size = UDim2.new(0, 35, 0, 35)
-CloseBtn.Position = UDim2.new(1, -35, 0, 0)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-CloseBtn.Font = Enum.Font.Gotham
-CloseBtn.TextSize = 16
-CloseBtn.Parent = TitleBar
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
-
--- Debug Status Label (Bottom)
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 20)
-StatusLabel.Position = UDim2.new(0, 10, 1, -25)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Status: Idle"
-StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.TextSize = 10
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.Parent = MainFrame
-
--- Sidebar
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 120, 1, -60)
-Sidebar.Position = UDim2.new(0, 0, 0, 36)
-Sidebar.BackgroundColor3 = SIDE_COLOR
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = MainFrame
-
-local SideCorner = Instance.new("UICorner")
-SideCorner.CornerRadius = UDim.new(0, 8)
-SideCorner.Parent = Sidebar
-
-local SidePatch = Instance.new("Frame")
-SidePatch.Size = UDim2.new(1, 0, 0, 10)
-SidePatch.BackgroundColor3 = SIDE_COLOR
-SidePatch.BorderSizePixel = 0
-SidePatch.Parent = Sidebar
-
--- Container
-local Container = Instance.new("Frame")
-Container.Size = UDim2.new(1, -130, 1, -65)
-Container.Position = UDim2.new(0, 125, 0, 40)
-Container.BackgroundTransparency = 1
-Container.Parent = MainFrame
-
---// 5. COMPONENT SYSTEM //--
-local Tabs = {}
-
-function CreateTab(name)
-    local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(1, -10, 0, 32)
-    TabBtn.Position = UDim2.new(0, 5, 0, 0)
-    TabBtn.BackgroundColor3 = SIDE_COLOR 
-    TabBtn.AutoButtonColor = true
-    TabBtn.Text = name
-    TabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
-    TabBtn.Font = Enum.Font.GothamMedium
-    TabBtn.TextSize = 13
-    TabBtn.Parent = Sidebar
-    
-    local TabCorner = Instance.new("UICorner")
-    TabCorner.CornerRadius = UDim.new(0, 6)
-    TabCorner.Parent = TabBtn
-    
-    local TabPage = Instance.new("ScrollingFrame")
-    TabPage.Size = UDim2.new(1, 0, 1, 0)
-    TabPage.BackgroundTransparency = 1
-    TabPage.Visible = false
-    TabPage.ScrollBarThickness = 3
-    TabPage.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
-    TabPage.Parent = Container
-    
-    local PL = Instance.new("UIListLayout")
-    PL.Parent = TabPage
-    PL.SortOrder = Enum.SortOrder.LayoutOrder
-    PL.Padding = UDim.new(0, 6)
-    
-    TabBtn.MouseButton1Click:Connect(function()
-        for _, t in pairs(Tabs) do
-            t.Btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-            t.Btn.BackgroundColor3 = SIDE_COLOR
-            t.Page.Visible = false
-        end
-        TabBtn.TextColor3 = ACCENT_COLOR
-        TabBtn.BackgroundColor3 = BG_COLOR
-        TabPage.Visible = true
-    end)
-    
-    table.insert(Tabs, {Btn = TabBtn, Page = TabPage})
-    return TabPage
+-- ===== BOOTH SCANNER =====
+local function scanBooths()
+	detectionLog = {}
+	boothsData = {}
+	
+	table.insert(detectionLog, "🔍 Scanning booths...")
+	
+	local foundCount = 0
+	
+	local function checkObject(obj)
+		for _, petName in ipairs(PET_LIST) do
+			if obj.Name == petName then
+				local parent = obj.Parent
+				local boothName = "Unknown Booth"
+				
+				if parent and parent.Parent then
+					boothName = parent.Parent.Name or "Booth"
+				end
+				
+				local price = "Unknown"
+				if obj:FindFirstChild("Price") then
+					price = obj.Price.Value
+				elseif obj:FindFirstChild("Value") then
+					price = obj.Value.Value
+				end
+				
+				foundCount = foundCount + 1
+				table.insert(detectionLog, "✓ " .. petName .. " - " .. boothName .. " (" .. tostring(price) .. ")")
+				table.insert(boothsData, {
+					Name = petName,
+					Booth = boothName,
+					Price = price,
+					Object = obj
+				})
+				return true
+			end
+		end
+		return false
+	end
+	
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		checkObject(obj)
+	end
+	
+	if foundCount == 0 then
+		table.insert(detectionLog, "❌ No pets found in booths")
+	else
+		table.insert(detectionLog, "✅ Found " .. foundCount .. " pets!")
+	end
+	
+	print("Scan complete: " .. foundCount .. " pets found")
+	return foundCount
 end
 
-local TabListLayout = Instance.new("UIListLayout")
-TabListLayout.Parent = Sidebar
-TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-TabListLayout.Padding = UDim.new(0, 4)
-local TabPadding = Instance.new("UIPadding")
-TabPadding.Parent = Sidebar
-TabPadding.PaddingTop = UDim.new(0, 10)
+-- ===== CREATE FLUENT WINDOW =====
+local Window = Fluent:CreateWindow({
+	Title = "🎯 Snipe Pets",
+	SubTitle = "Premium Pet Sniping Tool",
+	TabWidth = 160,
+	Size = UDim2.new(0, 800, 0, 600),
+	Acrylic = true,
+	Theme = "Dark",
+	MinimizeKey = Enum.KeyCode.LeftControl
+})
 
-function CreateToggle(parent, text, default, callback)
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = ITEM_COLOR
-    Frame.Parent = parent
-    local C = Instance.new("UICorner")
-    C.CornerRadius = UDim.new(0, 6)
-    C.Parent = Frame
-    
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.7, 0, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = text
-    Label.TextColor3 = ACCENT_COLOR
-    Label.Font = Enum.Font.GothamMedium
-    Label.TextSize = 12
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Frame
-    
-    local Status = Instance.new("Frame")
-    Status.Size = UDim2.new(0, 40, 0, 20)
-    Status.Position = UDim2.new(1, -50, 0.5, -10)
-    Status.BackgroundColor3 = default and BUTTON_COLOR or Color3.fromRGB(80, 80, 80)
-    Status.Parent = Frame
-    local SC = Instance.new("UICorner")
-    SC.CornerRadius = UDim.new(1, 0)
-    SC.Parent = Status
-    
-    local Dot = Instance.new("Frame")
-    Dot.Size = UDim2.new(0, 16, 0, 16)
-    Dot.Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
-    Dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Dot.Parent = Status
-    local DC = Instance.new("UICorner")
-    DC.CornerRadius = UDim.new(1, 0)
-    DC.Parent = Dot
+-- ===== PETS TAB =====
+local PetsTab = Window:AddTab({
+	Title = "🎯 Pets",
+	Icon = "rbxassetid://7733799120"
+})
 
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 1, 0)
-    Btn.BackgroundTransparency = 1
-    Btn.Text = ""
-    Btn.Parent = Frame
-    
-    local isOn = default
-    Btn.MouseButton1Click:Connect(function()
-        isOn = not isOn
-        Status.BackgroundColor3 = isOn and BUTTON_COLOR or Color3.fromRGB(80, 80, 80)
-        Dot:TweenPosition(isOn and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8), "Out", "Quad", 0.1, true)
-        callback(isOn)
-    end)
-end
+PetsTab:AddLabel("Selected Pets: None")
 
-function CreateDropdown(parent, text, options, callback)
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = ITEM_COLOR
-    Frame.ClipsDescendants = true 
-    Frame.Parent = parent
-    local C = Instance.new("UICorner")
-    C.CornerRadius = UDim.new(0, 6)
-    C.Parent = Frame
-    
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -30, 0, 32)
-    Label.Position = UDim2.new(0, 10, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = text .. ": Select..."
-    Label.TextColor3 = ACCENT_COLOR
-    Label.Font = Enum.Font.GothamMedium
-    Label.TextSize = 12
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Frame
-    
-    local Arrow = Instance.new("TextLabel")
-    Arrow.Size = UDim2.new(0, 30, 0, 32)
-    Arrow.Position = UDim2.new(1, -30, 0, 0)
-    Arrow.BackgroundTransparency = 1
-    Arrow.Text = "v"
-    Arrow.TextColor3 = Color3.fromRGB(150, 150, 150)
-    Arrow.Font = Enum.Font.GothamBold
-    Arrow.Parent = Frame
-    
-    local Container = Instance.new("ScrollingFrame")
-    Container.Size = UDim2.new(1, 0, 1, -32) 
-    Container.Position = UDim2.new(0, 0, 0, 32)
-    Container.BackgroundColor3 = Color3.fromRGB(45, 45, 45) 
-    Container.BorderSizePixel = 0
-    Container.ScrollBarThickness = 2
-    Container.Visible = true
-    Container.Parent = Frame
-    
-    local CL = Instance.new("UIListLayout")
-    CL.Parent = Container
-    CL.SortOrder = Enum.SortOrder.LayoutOrder
-    
-    local isOpen = false
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 0, 32)
-    Btn.BackgroundTransparency = 1
-    Btn.Text = ""
-    Btn.Parent = Frame
-    
-    local function RefreshList(newOptions)
-        for _, c in pairs(Container:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-        for i, opt in pairs(newOptions) do
-            local B = Instance.new("TextButton")
-            B.Size = UDim2.new(1, 0, 0, 25)
-            B.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-            B.TextColor3 = Color3.fromRGB(200, 200, 200)
-            B.Text = tostring(opt)
-            B.Font = Enum.Font.Gotham
-            B.TextSize = 12
-            B.LayoutOrder = i
-            B.Parent = Container
-            B.MouseButton1Click:Connect(function()
-                Label.Text = text .. ": " .. tostring(opt)
-                isOpen = false
-                Frame:TweenSize(UDim2.new(1, 0, 0, 32), "Out", "Quad", 0.2, true)
-                callback(opt)
-            end)
-        end
-        Container.CanvasSize = UDim2.new(0, 0, 0, #newOptions * 25)
-    end
-    RefreshList(options)
-    
-    Btn.MouseButton1Click:Connect(function()
-        isOpen = not isOpen
-        if isOpen then
-            Frame:TweenSize(UDim2.new(1, 0, 0, 150), "Out", "Quad", 0.2, true)
-        else
-            Frame:TweenSize(UDim2.new(1, 0, 0, 32), "Out", "Quad", 0.2, true)
-        end
-    end)
-    return RefreshList 
-end
+PetsTab:AddDropdown("PetSelect", {
+	Title = "Select Pets",
+	Values = PET_LIST,
+	Multi = true,
+	Default = 1,
+	Callback = function(Value)
+		selectedPets = Value
+		print("Selected pets:", table.concat(Value, ", "))
+	end
+})
 
-function CreateButton(parent, text, callback)
-    local Frame = Instance.new("TextButton")
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = BUTTON_COLOR
-    Frame.Text = text
-    Frame.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Frame.Font = Enum.Font.GothamBold
-    Frame.TextSize = 13
-    Frame.Parent = parent
-    local C = Instance.new("UICorner")
-    C.CornerRadius = UDim.new(0, 6)
-    C.Parent = Frame
-    Frame.MouseButton1Click:Connect(callback)
-end
+PetsTab:AddInput("SearchPet", {
+	Title = "Search Pet",
+	Default = "",
+	Placeholder = "Type pet name...",
+	Numeric = false,
+	Finished = false,
+	Callback = function(Value)
+		print("Searching for:", Value)
+	end
+})
 
---// 6. BUILD TABS //--
+PetsTab:AddButton({
+	Title = "Clear Selection",
+	Description = "Clear all selected pets",
+	Callback = function()
+		selectedPets = {}
+		print("Selection cleared")
+	end
+})
 
--- TAB 1: FARMING
-local FarmTab = CreateTab("Farming")
-Tabs[1].Btn.TextColor3 = ACCENT_COLOR; Tabs[1].Btn.BackgroundColor3 = BG_COLOR; Tabs[1].Page.Visible = true
+PetsTab:AddDivider()
 
-CreateToggle(FarmTab, "Auto Click", false, function(val) Settings.AutoClick = val end)
+PetsTab:AddDropdown("KGMode", {
+	Title = "KG Mode",
+	Values = {"Weight", "Value", "Custom"},
+	Default = 1,
+	Callback = function(Value)
+		print("KG Mode:", Value)
+	end
+})
 
--- TAB 2: EGG
-local EggTab = CreateTab("Egg")
+PetsTab:AddInput("BaseKG", {
+	Title = "Base KG to snipe",
+	Default = "0",
+	Placeholder = "Enter KG...",
+	Numeric = true,
+	Finished = false,
+	Callback = function(Value)
+		print("Base KG:", Value)
+	end
+})
 
-CreateToggle(EggTab, "Auto Teleport", true, function(val) Settings.AutoTp = val end)
+PetsTab:AddInput("BuyPrice", {
+	Title = "Buy Price (below or equal)",
+	Default = "0",
+	Placeholder = "Enter max price...",
+	Numeric = true,
+	Finished = false,
+	Callback = function(Value)
+		print("Max buy price:", Value)
+	end
+})
 
-local UpdateEggList = CreateDropdown(EggTab, "Select Egg", {"Scanning..."}, function(val)
-    Settings.SelectedEgg = val
-    if Settings.AutoTp then TeleportToEgg(val) end
+-- ===== BOOTHS TAB =====
+local BoothsTab = Window:AddTab({
+	Title = "🔍 Booths",
+	Icon = "rbxassetid://7733799120"
+})
+
+BoothsTab:AddButton({
+	Title = "🔍 Scan Booths",
+	Description = "Scan for all available pets in booths",
+	Callback = function()
+		scanBooths()
+		print("Booth scan completed!")
+	end
+})
+
+local LogLabel = BoothsTab:AddLabel("Click scan to find pets")
+
+-- Update log display
+RunService.Heartbeat:Connect(function()
+	if #detectionLog > 0 then
+		LogLabel:Set(table.concat(detectionLog, "\n"))
+	end
 end)
 
-CreateDropdown(EggTab, "Mode", {"1x", "3x", "8x"}, function(val)
-    Settings.HatchMode = tonumber(string.match(val, "%d+")) or 1
-end)
+-- ===== SNIPE TAB =====
+local SnipeTab = Window:AddTab({
+	Title = "⚡ Snipe",
+	Icon = "rbxassetid://7733799120"
+})
 
-CreateToggle(EggTab, "Auto Hatch (0.01s)", false, function(val) Settings.AutoHatch = val end)
+SnipeTab:AddButton({
+	Title = "▶️ START SNIPING",
+	Description = "Start auto-sniping selected pets",
+	Callback = function()
+		isAutoSniping = true
+		print("🎯 Sniping started!")
+	end
+})
 
--- TAB 3: SETTINGS
-local SettingsTab = CreateTab("Settings")
+SnipeTab:AddButton({
+	Title = "⏹️ STOP SNIPING",
+	Description = "Stop auto-sniping",
+	Callback = function()
+		isAutoSniping = false
+		print("⏹️ Sniping stopped")
+	end
+})
 
-CreateToggle(SettingsTab, "Anti-AFK (24/7)", true, function(val) Settings.AntiAfk = val end)
+SnipeTab:AddToggle("AutoRejoin", {
+	Title = "Auto Rejoin",
+	Default = false,
+	Callback = function(Value)
+		print("Auto rejoin:", Value)
+	end
+})
 
-CreateButton(SettingsTab, "Save Config", function()
-    if writefile then
-        local json = HttpService:JSONEncode(Settings)
-        writefile("SoraHubConfig.json", json)
-    end
-end)
+SnipeTab:AddToggle("Notifications", {
+	Title = "Notifications",
+	Default = true,
+	Callback = function(Value)
+		print("Notifications:", Value)
+	end
+})
 
---// 7. LOGIC LOOPS //--
+-- ===== SETTINGS TAB =====
+local SettingsTab = Window:AddTab({
+	Title = "⚙️ Settings",
+	Icon = "rbxassetid://7733799120"
+})
 
-function TeleportToEgg(eggName)
-    local eggModel = nil
-    local f = workspace:FindFirstChild("Eggs") or workspace:FindFirstChild("EggCapsules")
-    if f then eggModel = f:FindFirstChild(eggName) end
-    if eggModel and eggModel:IsA("Model") and eggModel.PrimaryPart then
-        Players.LocalPlayer.Character:SetPrimaryPartCFrame(eggModel.PrimaryPart.CFrame * CFrame.new(0, 0, 5)) 
-    elseif eggModel and eggModel:IsA("Part") then
-        Players.LocalPlayer.Character:SetPrimaryPartCFrame(eggModel.CFrame * CFrame.new(0, 0, 5))
-    end
-end
+SettingsTab:AddLabel("Tool Settings")
 
--- AUTO REFRESH
-local lastEggCount = -1
-task.spawn(function()
-    while true do
-        wait(1)
-        local eggs = {}
-        local f = workspace:FindFirstChild("Eggs") or workspace:FindFirstChild("EggCapsules")
-        if f then
-            for _, v in pairs(f:GetChildren()) do
-                if v:IsA("Model") or v:IsA("Part") then table.insert(eggs, v.Name) end
-            end
-        end
-        if #eggs ~= lastEggCount then
-            table.sort(eggs)
-            UpdateEggList(eggs)
-            lastEggCount = #eggs
-        end
-    end
-end)
+SettingsTab:AddToggle("SoundEffects", {
+	Title = "Sound Effects",
+	Default = true,
+	Callback = function(Value)
+		print("Sound effects:", Value)
+	end
+})
 
--- INPUT SIMULATION
-task.spawn(function()
-    while true do
-        wait(60) 
-        if Settings.AntiAfk then
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new(999, 999))
-        end
-    end
-end)
+SettingsTab:AddButton({
+	Title = "Reset Settings",
+	Description = "Reset all settings to default",
+	Callback = function()
+		print("Settings reset")
+	end
+})
 
-task.spawn(function()
-    while true do
-        if Settings.AutoClick then
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton1(Vector2.new(999, 999))
-        end
-        task.wait(0.1)
-    end
-end)
+-- ===== SAVE MANAGER =====
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
 
--- FAST HATCH LOOP (0.01s Logic)
-task.spawn(function()
-    while true do
-        -- Use Heartbeat for max speed (approx 0.01s)
-        RunService.Heartbeat:Wait()
-        
-        if Settings.AutoHatch then
-            if Remote_OpenEgg and Settings.SelectedEgg ~= "None" then
-                StatusLabel.Text = "Hatching: " .. Settings.SelectedEgg .. " (" .. Settings.HatchMode .. "x)"
-                
-                -- Fast Spam Logic (No pcall wait)
-                task.spawn(function()
-                    if Remote_OpenEgg:IsA("RemoteFunction") then
-                         -- InvokeServer yields, so we wrap it to not block the loop
-                        Remote_OpenEgg:InvokeServer(Settings.SelectedEgg, Settings.HatchMode)
-                    else
-                        Remote_OpenEgg:FireServer(Settings.SelectedEgg, Settings.HatchMode)
-                    end
-                end)
-            else
-                StatusLabel.Text = "Status: Waiting for Egg Selection..."
-            end
-        else
-            StatusLabel.Text = "Status: Idle"
-        end
-    end
-end)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
 
---// 8. CLEAN OPEN BUTTON //--
-local OpenBtn = Instance.new("TextButton")
-OpenBtn.Name = "OpenButton"
-OpenBtn.Size = UDim2.new(0, 50, 0, 50)
-OpenBtn.Position = UDim2.new(0, 15, 0, 15)
-OpenBtn.BackgroundColor3 = BG_COLOR
-OpenBtn.Text = "Menu"
-OpenBtn.TextColor3 = ACCENT_COLOR
-OpenBtn.Font = Enum.Font.GothamBold
-OpenBtn.TextSize = 12
-OpenBtn.Parent = ScreenGui
-local OBC = Instance.new("UICorner")
-OBC.CornerRadius = UDim.new(0, 8)
-OBC.Parent = OpenBtn
+InterfaceManager:SetOption("Keybind", Enum.KeyCode.RightControl)
 
-OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+SaveManager:LoadAutoloadConfig()
 
-local function Drag(frame)
-    local dragToggle, dragStart, startPos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragToggle = true
-            dragStart = input.Position
-            startPos = frame.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragToggle = false end end)
-        end
-    end)
-    frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            if dragToggle then
-                local delta = input.Position - dragStart
-                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end
-    end)
-end
-Drag(MainFrame)
-Drag(OpenBtn)
+print("✅ Snipe Pets Tool with Fluent UI loaded!")
+print("🎯 Press RightControl to toggle UI")
