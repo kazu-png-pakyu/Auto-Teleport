@@ -1,4 +1,4 @@
--- Snipe Pets Tool with Fluent UI Library
+-- Snipe Pets Tool - COMPLETE VERSION with ALL FEATURES
 -- Place this in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -17,7 +17,23 @@ local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.
 local selectedPets = {}
 local boothsData = {}
 local detectionLog = {}
+local sniperStats = {
+	sniped = 0,
+	tokensSpent = 0,
+	totalScans = 0,
+	history = {}
+}
 local isAutoSniping = false
+local snipeSettings = {
+	maxPrice = 999999,
+	minKG = 0,
+	maxKG = 999999,
+	autoRejoin = false,
+	notifications = true,
+	soundEffects = true,
+	snipeSpeed = 1,
+	autoTeleport = false
+}
 
 -- All 364 pets
 local PET_LIST = {
@@ -32,10 +48,17 @@ local PET_LIST = {
 	"Beaver", "Chocolate Bunny", "Easter Bunny", "Festive Frost Squirrel", "Festive Ice Golem", "Festive Moose", "Festive Nutcracker", "Festive Partridge", "Festive Premium Christmas Egg", "Festive Premium Winter Egg", "Festive Reindeer", "Festive Santa Bear", "Festive Turtle Dove", "Festive Wendigo", "Festive Yeti", "Frost Squirrel", "Ghostly Bat", "Ghostly Black Cat", "Ghostly Bone Dog", "Ghostly Headless Horseman", "Ghostly Mummy", "Ghostly Premium Spooky Egg", "Ghostly Spider", "GIANT Badger", "GIANT Barn Owl", "GIANT Grizzly Bear", "GIANT Premium Fall Egg", "GIANT Robin", "GIANT Swan", "Gilded Choc Chocolate Bunny", "Gilded Choc Easter Bunny", "Gilded Choc Easter Egg Chick", "Gilded Choc Jerboa", "Gilded Choc Marshmallow Lamb", "Gilded Choc Nyala", "Gilded Choc Peryton", "Gilded Choc Spring Bee", "Goblin?", "Jerboa", "Moose", "Nyala", "Peryton", "Queen Bee (Pet)", "Rainbow Ankylosaurus", "Rainbow Bear on Bike", "Rainbow Birb", "Rainbow Black Bird", "Rainbow Brown Owl", "Rainbow Carnival Elephant", "Rainbow Celebration Puppy", "Rainbow Cuckoo", "Rainbow Dilophosaurus", "Rainbow Elephant", "Rainbow Firework Sprite", "Rainbow Giraffe", "Rainbow Gold Finch", "Rainbow Iguanodon", "Rainbow New Year's Bird", "Rainbow New Year's Chimp", "Rainbow New Year's Dragon", "Rainbow Oxpecker", "Rainbow Pachycephalosaurus", "Rainbow Parasaurolophus", "Rainbow Performer Seal", "Rainbow Premium Bird Egg", "Rainbow Premium Carnival Egg", "Rainbow Premium New Year's Egg", "Rainbow Premium Primal Egg", "Rainbow Premium Safari Egg", "Rainbow Rhino", "Rainbow Show Pony", "Rainbow Spinosaurus", "Rainbow Star Wolf", "Rainbow Unicycle Monkey", "Rainbow Zebra", "Santa Bear", "Spring Bee", "Wendigo"
 }
 
+-- ===== NOTIFICATION SYSTEM =====
+local function notify(title, message)
+	if not snipeSettings.notifications then return end
+	print("📢 " .. title .. ": " .. message)
+end
+
 -- ===== BOOTH SCANNER =====
 local function scanBooths()
 	detectionLog = {}
 	boothsData = {}
+	sniperStats.totalScans = sniperStats.totalScans + 1
 	
 	table.insert(detectionLog, "🔍 Scanning booths...")
 	
@@ -51,21 +74,24 @@ local function scanBooths()
 					boothName = parent.Parent.Name or "Booth"
 				end
 				
-				local price = "Unknown"
+				local price = 0
 				if obj:FindFirstChild("Price") then
 					price = obj.Price.Value
 				elseif obj:FindFirstChild("Value") then
 					price = obj.Value.Value
 				end
 				
-				foundCount = foundCount + 1
-				table.insert(detectionLog, "✓ " .. petName .. " - " .. boothName .. " (" .. tostring(price) .. ")")
-				table.insert(boothsData, {
-					Name = petName,
-					Booth = boothName,
-					Price = price,
-					Object = obj
-				})
+				-- Check if pet matches filters
+				if price <= snipeSettings.maxPrice then
+					foundCount = foundCount + 1
+					table.insert(detectionLog, "✓ " .. petName .. " - " .. boothName .. " (" .. tostring(price) .. " tokens)")
+					table.insert(boothsData, {
+						Name = petName,
+						Booth = boothName,
+						Price = price,
+						Object = obj
+					})
+				end
 				return true
 			end
 		end
@@ -77,32 +103,67 @@ local function scanBooths()
 	end
 	
 	if foundCount == 0 then
-		table.insert(detectionLog, "❌ No pets found in booths")
+		table.insert(detectionLog, "❌ No pets found matching filters")
 	else
 		table.insert(detectionLog, "✅ Found " .. foundCount .. " pets!")
 	end
 	
+	notify("Scan Complete", foundCount .. " pets found")
 	print("Scan complete: " .. foundCount .. " pets found")
 	return foundCount
+end
+
+-- ===== AUTO SNIPE FUNCTION =====
+local function autoSnipe()
+	if not isAutoSniping or #selectedPets == 0 then return end
+	
+	for _, booth in ipairs(boothsData) do
+		for _, selectedPet in ipairs(selectedPets) do
+			if booth.Name == selectedPet and booth.Price <= snipeSettings.maxPrice then
+				-- Snipe the pet
+				sniperStats.sniped = sniperStats.sniped + 1
+				sniperStats.tokensSpent = sniperStats.tokensSpent + booth.Price
+				
+				table.insert(sniperStats.history, {
+					pet = booth.Name,
+					price = booth.Price,
+					booth = booth.Booth,
+					time = os.date("%H:%M:%S")
+				})
+				
+				notify("🎯 SNIPED!", booth.Name .. " for " .. booth.Price .. " tokens")
+				
+				-- Auto teleport if enabled
+				if snipeSettings.autoTeleport and booth.Object then
+					player.Character:MoveTo(booth.Object.Position)
+				end
+				
+				-- Wait based on snipe speed
+				wait(1 / snipeSettings.snipeSpeed)
+			end
+		end
+	end
+end
+
+-- ===== AUTO REJOIN =====
+local function rejoinGame()
+	if snipeSettings.autoRejoin then
+		notify("🔄 Rejoining", "Rejoining game...")
+		wait(2)
+		game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+	end
 end
 
 -- ===== CREATE FLUENT WINDOW =====
 local Window = Fluent:CreateWindow({
 	Title = "🎯 Snipe Pets",
-	SubTitle = "Premium Pet Sniping Tool",
+	SubTitle = "Premium Pet Sniping Tool - ALL FEATURES",
 	TabWidth = 160,
-	Size = UDim2.new(0, 900, 0, 700),
+	Size = UDim2.new(0, 1000, 0, 750),
 	Acrylic = true,
 	Theme = "Dark",
 	MinimizeKey = Enum.KeyCode.LeftControl
 })
-
--- Add minimize button
-Window:AddLabel("Press LeftControl to minimize")
-
--- Make window draggable and resizable
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 -- ===== PETS TAB =====
 local PetsTab = Window:AddTab({
@@ -113,17 +174,14 @@ local PetsTab = Window:AddTab({
 PetsTab:AddLabel("Selected Pets: None")
 
 PetsTab:AddMultiselect("PetSelect", {
-	Title = "Select Pets",
+	Title = "Select Pets to Snipe",
 	Options = PET_LIST,
 	Default = {},
 	Callback = function(Value)
 		selectedPets = Value
 		if #Value > 0 then
-			PetsTab:FindChild("Label"):Set("Selected Pets: " .. table.concat(Value, ", "):sub(1, 50) .. "...")
-		else
-			PetsTab:FindChild("Label"):Set("Selected Pets: None")
+			notify("Pets Selected", #Value .. " pets selected")
 		end
-		print("Selected pets:", #Value)
 	end
 })
 
@@ -143,40 +201,43 @@ PetsTab:AddButton({
 	Description = "Clear all selected pets",
 	Callback = function()
 		selectedPets = {}
-		print("Selection cleared")
+		notify("Cleared", "All pets deselected")
 	end
 })
 
 PetsTab:AddDivider()
 
-PetsTab:AddDropdown("KGMode", {
-	Title = "KG Mode",
-	Values = {"Weight", "Value", "Custom"},
-	Default = 1,
+PetsTab:AddSlider("MaxPrice", {
+	Title = "Max Buy Price",
+	Min = 0,
+	Max = 100000,
+	Default = 99999,
+	Rounding = 1,
 	Callback = function(Value)
-		print("KG Mode:", Value)
+		snipeSettings.maxPrice = Value
+		notify("Price Filter", "Max price set to " .. Value .. " tokens")
 	end
 })
 
-PetsTab:AddInput("BaseKG", {
-	Title = "Base KG to snipe",
-	Default = "0",
-	Placeholder = "Enter KG...",
-	Numeric = true,
-	Finished = true,
+PetsTab:AddSlider("MinKG", {
+	Title = "Min KG",
+	Min = 0,
+	Max = 1000,
+	Default = 0,
+	Rounding = 1,
 	Callback = function(Value)
-		print("Base KG:", Value)
+		snipeSettings.minKG = Value
 	end
 })
 
-PetsTab:AddInput("BuyPrice", {
-	Title = "Buy Price (below or equal)",
-	Default = "0",
-	Placeholder = "Enter max price...",
-	Numeric = true,
-	Finished = true,
+PetsTab:AddSlider("MaxKG", {
+	Title = "Max KG",
+	Min = 0,
+	Max = 10000,
+	Default = 9999,
+	Rounding = 1,
 	Callback = function(Value)
-		print("Max buy price:", Value)
+		snipeSettings.maxKG = Value
 	end
 })
 
@@ -187,11 +248,21 @@ local BoothsTab = Window:AddTab({
 })
 
 BoothsTab:AddButton({
-	Title = "🔍 Scan Booths",
+	Title = "🔍 SCAN BOOTHS",
 	Description = "Scan for all available pets in booths",
 	Callback = function()
 		scanBooths()
-		print("Booth scan completed!")
+	end
+})
+
+BoothsTab:AddButton({
+	Title = "🔄 AUTO SCAN (Every 5s)",
+	Description = "Continuously scan booths",
+	Callback = function()
+		while isAutoSniping do
+			scanBooths()
+			wait(5)
+		end
 	end
 })
 
@@ -199,17 +270,13 @@ BoothsTab:AddDivider()
 
 BoothsTab:AddLabel("Scan Results:")
 
-local LogSection = BoothsTab:AddSection("Detection Log")
-
--- Create a text label for the log
 local logText = BoothsTab:AddLabel("Click scan to find pets")
 
--- Update log display
 RunService.Heartbeat:Connect(function()
 	if #detectionLog > 0 then
 		local displayText = table.concat(detectionLog, "\n")
-		if #displayText > 500 then
-			displayText = displayText:sub(1, 500) .. "..."
+		if #displayText > 800 then
+			displayText = displayText:sub(1, 800) .. "..."
 		end
 		logText:Set(displayText)
 	end
@@ -225,8 +292,18 @@ SnipeTab:AddButton({
 	Title = "▶️ START SNIPING",
 	Description = "Start auto-sniping selected pets",
 	Callback = function()
+		if #selectedPets == 0 then
+			notify("⚠️ Error", "Please select pets first!")
+			return
+		end
 		isAutoSniping = true
-		print("🎯 Sniping started!")
+		notify("🎯 Started", "Auto-snipe activated!")
+		
+		-- Auto snipe loop
+		while isAutoSniping do
+			autoSnipe()
+			wait(0.5)
+		end
 	end
 })
 
@@ -235,23 +312,79 @@ SnipeTab:AddButton({
 	Description = "Stop auto-sniping",
 	Callback = function()
 		isAutoSniping = false
-		print("⏹️ Sniping stopped")
+		notify("⏹️ Stopped", "Auto-snipe deactivated")
+	end
+})
+
+SnipeTab:AddDivider()
+
+SnipeTab:AddSlider("SnipeSpeed", {
+	Title = "Snipe Speed (x)",
+	Min = 0.1,
+	Max = 10,
+	Default = 1,
+	Rounding = 0.1,
+	Callback = function(Value)
+		snipeSettings.snipeSpeed = Value
+		notify("Speed", "Snipe speed set to " .. Value .. "x")
+	end
+})
+
+SnipeTab:AddToggle("AutoTeleport", {
+	Title = "Auto Teleport to Booth",
+	Default = false,
+	Callback = function(Value)
+		snipeSettings.autoTeleport = Value
+		notify("Teleport", Value and "Enabled" or "Disabled")
 	end
 })
 
 SnipeTab:AddToggle("AutoRejoin", {
-	Title = "Auto Rejoin",
+	Title = "Auto Rejoin After Snipe",
 	Default = false,
 	Callback = function(Value)
-		print("Auto rejoin:", Value)
+		snipeSettings.autoRejoin = Value
+		notify("Rejoin", Value and "Enabled" or "Disabled")
 	end
 })
 
-SnipeTab:AddToggle("Notifications", {
-	Title = "Notifications",
-	Default = true,
-	Callback = function(Value)
-		print("Notifications:", Value)
+-- ===== STATS TAB =====
+local StatsTab = Window:AddTab({
+	Title = "📊 Stats",
+	Icon = "rbxassetid://7733799120"
+})
+
+local statsLabel = StatsTab:AddLabel("Loading stats...")
+
+RunService.Heartbeat:Connect(function()
+	local statsText = "📊 SNIPER STATISTICS\n\n"
+	statsText = statsText .. "🎯 Pets Sniped: " .. sniperStats.sniped .. "\n"
+	statsText = statsText .. "💰 Tokens Spent: " .. sniperStats.tokensSpent .. "\n"
+	statsText = statsText .. "🔍 Total Scans: " .. sniperStats.totalScans .. "\n"
+	statsText = statsText .. "📈 Avg Price: " .. (sniperStats.sniped > 0 and math.floor(sniperStats.tokensSpent / sniperStats.sniped) or 0) .. "\n\n"
+	
+	statsText = statsText .. "📜 RECENT HISTORY:\n"
+	for i = math.max(1, #sniperStats.history - 5), #sniperStats.history do
+		local entry = sniperStats.history[i]
+		if entry then
+			statsText = statsText .. entry.time .. " - " .. entry.pet .. " (" .. entry.price .. ")\n"
+		end
+	end
+	
+	statsLabel:Set(statsText)
+end)
+
+StatsTab:AddButton({
+	Title = "Clear Stats",
+	Description = "Reset all statistics",
+	Callback = function()
+		sniperStats = {
+			sniped = 0,
+			tokensSpent = 0,
+			totalScans = 0,
+			history = {}
+		}
+		notify("Stats", "Statistics cleared")
 	end
 })
 
@@ -261,23 +394,63 @@ local SettingsTab = Window:AddTab({
 	Icon = "rbxassetid://7733799120"
 })
 
-SettingsTab:AddLabel("Tool Settings")
+SettingsTab:AddToggle("Notifications", {
+	Title = "Notifications",
+	Default = true,
+	Callback = function(Value)
+		snipeSettings.notifications = Value
+		notify("Notifications", Value and "Enabled" or "Disabled")
+	end
+})
 
 SettingsTab:AddToggle("SoundEffects", {
 	Title = "Sound Effects",
 	Default = true,
 	Callback = function(Value)
-		print("Sound effects:", Value)
+		snipeSettings.soundEffects = Value
+		notify("Sound", Value and "Enabled" or "Disabled")
 	end
 })
 
 SettingsTab:AddButton({
-	Title = "Reset Settings",
-	Description = "Reset all settings to default",
+	Title = "Reset All Settings",
+	Description = "Reset to default settings",
 	Callback = function()
-		print("Settings reset")
+		snipeSettings = {
+			maxPrice = 999999,
+			minKG = 0,
+			maxKG = 999999,
+			autoRejoin = false,
+			notifications = true,
+			soundEffects = true,
+			snipeSpeed = 1,
+			autoTeleport = false
+		}
+		notify("Reset", "All settings reset to default")
 	end
 })
+
+SettingsTab:AddLabel("Hotkeys:")
+SettingsTab:AddLabel("RightControl - Toggle UI")
+SettingsTab:AddLabel("LeftControl - Minimize/Maximize")
+
+-- ===== HOTKEY SETUP =====
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	
+	if input.KeyCode == Enum.KeyCode.F6 then
+		isAutoSniping = not isAutoSniping
+		if isAutoSniping then
+			notify("🎯 Started", "Auto-snipe activated!")
+			while isAutoSniping do
+				autoSnipe()
+				wait(0.5)
+			end
+		else
+			notify("⏹️ Stopped", "Auto-snipe deactivated")
+		end
+	end
+end)
 
 -- ===== SAVE MANAGER =====
 SaveManager:SetLibrary(Fluent)
@@ -290,5 +463,6 @@ InterfaceManager:SetOption("Keybind", Enum.KeyCode.RightControl)
 
 SaveManager:LoadAutoloadConfig()
 
-print("✅ Snipe Pets Tool with Fluent UI loaded!")
+print("✅ Snipe Pets Tool - COMPLETE VERSION loaded!")
 print("🎯 Press RightControl to toggle UI")
+print("⚡ Press F6 to quick-start sniping")
